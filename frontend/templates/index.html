@@ -12,8 +12,13 @@
         <!-- Sidebar Navigation -->
         <aside class="sidebar collapsed" id="sidebar">
             <div class="sidebar-header">
-                <div class="sidebar-brand">NIQ</div>
-                <div class="sidebar-subtitle">Natural Intelligence Query</div>
+                <div class="sidebar-title">
+                    <div class="sidebar-brand">NIQ</div>
+                    <div class="sidebar-subtitle">Natural Intelligence Query</div>
+                </div>
+                <button class="sidebar-toggle" id="sidebar-toggle" aria-label="Sidebar'ı aç/kapat">
+                    <span class="sidebar-toggle-icon"></span>
+                </button>
             </div>
             
             <nav class="sidebar-nav">
@@ -40,8 +45,8 @@
             </nav>
         </aside>
 
-        <!-- Sidebar Toggle Button -->
-        <button class="sidebar-toggle" id="sidebar-toggle">
+        <!-- Floating sidebar toggle when sidebar is collapsed -->
+        <button class="sidebar-toggle-floating" id="sidebar-toggle-floating" aria-label="Sidebar'ı aç/kapat">
             <span class="sidebar-toggle-icon"></span>
         </button>
 
@@ -163,7 +168,13 @@
                     
                     <div class="form-grid">
                         <div class="input-group">
-                            <label for="db_server">Server</label>
+                            <div class="label-with-info">
+                                <label for="db_server">Server</label>
+                                <button type="button" class="info-trigger" data-target="info-db-server" aria-label="Server alanı bilgisi">i</button>
+                                <div class="info-popover" id="info-db-server" role="tooltip">
+                                    Bağlanacağınız SQL Server adresi veya sunucu adı (örnek: 192.168.56.1 ya da MY-SERVER).
+                                </div>
+                            </div>
                             <input 
                                 type="text" 
                                 id="db_server" 
@@ -185,7 +196,13 @@
                             </div>
                         </div>
                         <div class="input-group">
-                            <label for="db_database">Database</label>
+                            <div class="label-with-info">
+                                <label for="db_database">Database</label>
+                                <button type="button" class="info-trigger" data-target="info-db-database" aria-label="Database alanı bilgisi">i</button>
+                                <div class="info-popover" id="info-db-database" role="tooltip">
+                                    Bağlanmak istediğiniz veritabanının adı. Örnek: Northwind.
+                                </div>
+                            </div>
                             <input 
                                 type="text" 
                                 id="db_database" 
@@ -195,7 +212,13 @@
                             >
                         </div>
                         <div class="input-group">
-                            <label for="db_username">Username</label>
+                            <div class="label-with-info">
+                                <label for="db_username">Username</label>
+                                <button type="button" class="info-trigger" data-target="info-db-username" aria-label="Username alanı bilgisi">i</button>
+                                <div class="info-popover" id="info-db-username" role="tooltip">
+                                    SQL Server oturumu için kullanacağınız kullanıcı adı.
+                                </div>
+                            </div>
                             <input 
                                 type="text" 
                                 id="db_username" 
@@ -205,7 +228,13 @@
                             >
                         </div>
                         <div class="input-group">
-                            <label for="db_password">Password</label>
+                            <div class="label-with-info">
+                                <label for="db_password">Password</label>
+                                <button type="button" class="info-trigger" data-target="info-db-password" aria-label="Password alanı bilgisi">i</button>
+                                <div class="info-popover" id="info-db-password" role="tooltip">
+                                    Kullanıcıya ait parola. Bağlantı sonrası uygulama içinde saklanmaz.
+                                </div>
+                            </div>
                             <input 
                                 type="password" 
                                 id="db_password" 
@@ -381,7 +410,7 @@
             </main>
 
             <footer class="footer">
-                <p>NIQ v2.0 - Natural Intelligence Query</p>
+                <p>NIQ - Natural Intelligence Query</p>
             </footer>
         </div>
     </div>

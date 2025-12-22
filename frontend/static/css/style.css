@@ -647,8 +647,17 @@ html {
 }
 
 .sidebar-header {
-    padding: 0 1.5rem 2rem;
+    padding: 1.25rem 1.5rem 1.75rem;
     border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.sidebar-title {
+    display: flex;
+    flex-direction: column;
 }
 
 .sidebar-brand {
@@ -664,7 +673,7 @@ html {
 .sidebar-subtitle {
     font-size: var(--font-size-sm);
     color: var(--text-secondary);
-    margin-top: 0.5rem;
+    margin-top: 0.35rem;
 }
 
 .sidebar-nav {
@@ -713,11 +722,28 @@ html {
 }
 
 .sidebar-toggle {
+    position: relative;
+    margin-left: auto;
+    width: 36px;
+    height: 36px;
+    background: transparent;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-sm);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    z-index: 1;
+    box-shadow: none;
+}
+
+.sidebar-toggle-floating {
     position: fixed;
-    top: 1.5rem;
-    left: 1.5rem;
-    width: 44px;
-    height: 44px;
+    top: 1.25rem;
+    left: 1.25rem;
+    width: 40px;
+    height: 40px;
     background: var(--surface-color);
     border: 1px solid var(--border-color);
     border-radius: var(--border-radius-sm);
@@ -726,8 +752,15 @@ html {
     align-items: center;
     justify-content: center;
     transition: all 0.3s ease;
-    z-index: 1001;
+    z-index: 900;
     box-shadow: var(--shadow);
+    opacity: 0;
+    pointer-events: none;
+}
+
+body.sidebar-collapsed .sidebar-toggle-floating {
+    opacity: 1;
+    pointer-events: auto;
 }
 
 .sidebar-toggle:hover {
@@ -779,14 +812,6 @@ html {
 /* Adjust container margin when sidebar is visible */
 body:not(.sidebar-collapsed) .container {
     margin-left: 260px;
-}
-
-body.sidebar-collapsed .sidebar-toggle {
-    left: 1.5rem;
-}
-
-body:not(.sidebar-collapsed) .sidebar-toggle {
-    left: calc(260px + 1.5rem);
 }
 
 /* ==========================================================================
@@ -1622,6 +1647,70 @@ label {
     font-size: var(--font-size-sm);
     transition: all 0.2s ease;
     letter-spacing: 0.01em;
+}
+
+.label-with-info {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    position: relative;
+    width: 100%;
+    margin-bottom: 0.35rem;
+}
+
+.label-with-info label {
+    margin-bottom: 0;
+    flex: 1;
+}
+
+.info-trigger {
+    min-width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 50%;
+    border: 1px solid rgba(37, 99, 235, 0.25);
+    background: rgba(37, 99, 235, 0.06);
+    color: rgba(37, 99, 235, 0.7);
+    font-weight: 700;
+    font-size: 0.9rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    padding: 0;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.info-trigger:hover,
+.info-trigger:focus {
+    border-color: rgba(37, 99, 235, 0.55);
+    color: rgba(37, 99, 235, 0.9);
+    background: rgba(37, 99, 235, 0.12);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
+    outline: none;
+}
+
+.info-popover {
+    display: none;
+    position: absolute;
+    top: calc(100% + 0.5rem);
+    left: 0;
+    min-width: 240px;
+    max-width: 320px;
+    padding: 0.75rem 0.9rem;
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+    color: var(--text-secondary);
+    font-size: var(--font-size-sm);
+    line-height: 1.4;
+    z-index: 5;
+}
+
+.info-popover.open {
+    display: block;
 }
 
 .input-field,

@@ -11,8 +11,10 @@ class NIQApp {
         this.bindEvents();
         this.initializeSidebar();
         this.initializeScrollAnimations();
+        this.initializeInfoPopovers();
         this.initializeDashboard();
         this.initializeApp();
+        this.activateDefaultPage();
     }
 
     /**
@@ -23,6 +25,7 @@ class NIQApp {
             // Sidebar elements
             sidebar: document.getElementById('sidebar'),
             sidebarToggle: document.getElementById('sidebar-toggle'),
+            sidebarToggleFloating: document.getElementById('sidebar-toggle-floating'),
             sidebarNavItems: document.querySelectorAll('.sidebar-nav-item'),
             
             // Header element
@@ -110,18 +113,18 @@ class NIQApp {
      * Initialize sidebar toggle functionality
      */
     initializeSidebar() {
-        // Load sidebar state from localStorage
-        const sidebarCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
-        
-        if (!sidebarCollapsed) {
-            document.body.classList.remove('sidebar-collapsed');
-            if (this.elements.sidebar) this.elements.sidebar.classList.remove('collapsed');
-            if (this.elements.sidebarToggle) this.elements.sidebarToggle.classList.add('active');
-        }
+        const stored = localStorage.getItem('sidebarCollapsed');
+        const collapsed = stored === null ? true : stored === 'true';
+        this.applySidebarState(collapsed);
         
         // Sidebar toggle click event
         if (this.elements.sidebarToggle) {
             this.elements.sidebarToggle.addEventListener('click', () => {
+                this.toggleSidebar();
+            });
+        }
+        if (this.elements.sidebarToggleFloating) {
+            this.elements.sidebarToggleFloating.addEventListener('click', () => {
                 this.toggleSidebar();
             });
         }
@@ -184,6 +187,76 @@ class NIQApp {
         // Observe all sections
         this.elements.sections.forEach(section => {
             observer.observe(section);
+        });
+    }
+
+    /**
+     * Ensure there is an active page and sections are visible on load/return
+     */
+    activateDefaultPage() {
+        const hasActivePage = Array.from(this.elements.pageContents || []).some(pc => pc.classList.contains('active'));
+        if (!hasActivePage) {
+            this.switchPage('dashboard-page');
+        }
+        // Reveal sections so içerik boş görünmesin
+        if (this.elements.sections) {
+            this.elements.sections.forEach(section => section.classList.add('revealed'));
+        }
+    }
+
+    initializeInfoPopovers() {
+        const triggers = document.querySelectorAll('.info-trigger');
+        const popovers = document.querySelectorAll('.info-popover');
+        const containers = document.querySelectorAll('.label-with-info');
+
+        const closeAll = () => {
+            popovers.forEach(popover => popover.classList.remove('open'));
+        };
+
+        triggers.forEach(trigger => {
+            trigger.addEventListener('click', (event) => {
+                event.stopPropagation();
+                const targetId = trigger.dataset.target;
+                const popover = document.getElementById(targetId);
+                const isOpen = popover?.classList.contains('open');
+                closeAll();
+                if (popover && !isOpen) {
+                    popover.classList.add('open');
+                }
+            });
+        });
+
+        // Hover/focus ile göster, mouse/blur ile gizle
+        containers.forEach(container => {
+            const trigger = container.querySelector('.info-trigger');
+            const popover = container.querySelector('.info-popover');
+            if (!trigger || !popover) return;
+
+            let hideTimeout = null;
+
+            const open = () => {
+                clearTimeout(hideTimeout);
+                closeAll();
+                popover.classList.add('open');
+            };
+
+            const scheduleClose = () => {
+                hideTimeout = setTimeout(() => popover.classList.remove('open'), 150);
+            };
+
+            trigger.addEventListener('mouseenter', open);
+            trigger.addEventListener('focus', open);
+            trigger.addEventListener('mouseleave', scheduleClose);
+            trigger.addEventListener('blur', scheduleClose);
+            popover.addEventListener('mouseenter', () => clearTimeout(hideTimeout));
+            popover.addEventListener('mouseleave', scheduleClose);
+            container.addEventListener('mouseleave', scheduleClose);
+        });
+
+        document.addEventListener('click', (event) => {
+            if (!event.target.closest('.label-with-info')) {
+                closeAll();
+            }
         });
     }
 
@@ -296,10 +369,13 @@ class NIQApp {
                 break;
             case 'connect-db':
                 this.switchPage('query-page');
-                // Scroll to database section
-                setTimeout(() => {
-                    this.scrollToSection('db-section');
-                }, 300);
+            // Sayfanın en üstüne git
+            setTimeout(() => {
+                window.scrollTo({
+                    top: 0,
+                    behavior: 'smooth'
+                });
+            }, 0);
                 break;
             case 'view-history':
                 this.switchPage('history-page');
@@ -1101,6 +1177,36 @@ class NIQApp {
         }
     }
 
+    isSidebarCollapsed() {
+        return document.body.classList.contains('sidebar-collapsed');
+    }
+
+    applySidebarState(collapsed) {
+        if (collapsed) {
+            document.body.classList.add('sidebar-collapsed');
+            this.elements.sidebar?.classList.add('collapsed');
+            this.elements.sidebarToggle?.classList.remove('active');
+            if (this.elements.sidebarToggleFloating) {
+                this.elements.sidebarToggleFloating.style.opacity = '1';
+                this.elements.sidebarToggleFloating.style.pointerEvents = 'auto';
+            }
+        } else {
+            document.body.classList.remove('sidebar-collapsed');
+            this.elements.sidebar?.classList.remove('collapsed');
+            this.elements.sidebarToggle?.classList.add('active');
+            if (this.elements.sidebarToggleFloating) {
+                this.elements.sidebarToggleFloating.style.opacity = '0';
+                this.elements.sidebarToggleFloating.style.pointerEvents = 'none';
+            }
+        }
+        localStorage.setItem('sidebarCollapsed', collapsed ? 'true' : 'false');
+    }
+
+    toggleSidebar() {
+        const nextState = !this.isSidebarCollapsed();
+        this.applySidebarState(nextState);
+    }
+
     /**
      * Load saved queries from the database
      */
@@ -1771,12 +1877,19 @@ class NIQApp {
     }
 }
 
-// Initialize application when DOM is loaded
+// Uygulamayı ilk yüklemede başlat
 document.addEventListener('DOMContentLoaded', () => {
-    // DOM tamamen yüklendikten sonra uygulamayı başlat
     setTimeout(() => {
         window.app = new NIQApp();
-    }, 100); // 100ms gecikme ile DOM elementlerinin hazır olduğundan emin ol
+    }, 100);
+});
+
+// Kurulum rehberinden veya başka bir sayfadan geri dönüldüğünde
+// tarayıcının bfcache'ten getirdiği bozuk state yerine sayfayı tazeleyelim
+window.addEventListener('pageshow', (event) => {
+    if (event.persisted) {
+        window.location.reload();
+    }
 });
 
 document.addEventListener('DOMContentLoaded', function () {
