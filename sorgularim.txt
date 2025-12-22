@@ -156,3 +156,22 @@ WHERE UnitPrice = (SELECT MAX(UnitPrice) FROM Products)
 
 ✅ MESAJ: -1 satır etkilendi.
 
+
+================================================================================
+SORGU #24
+TARİH: 2025-11-03 22:02:37 +03
+DURUM: ✅ BAŞARILI
+================================================================================
+
+📝 SORU:
+5 müşterinin şehir bilgisini getir
+
+📋 TABLOLAR:
+Customers
+
+🔍 SQL SORGUSU:
+SELECT TOP 5 City AS CustomerCity FROM Customers;
+
+📊 SONUÇLAR: 5 satır
+Veri: [{'CustomerCity': 'Aachen'}, {'CustomerCity': 'Albuquerque'}, {'CustomerCity': 'Anchorage'}, {'CustomerCity': 'Århus'}, {'CustomerCity': 'Barcelona'}]
+

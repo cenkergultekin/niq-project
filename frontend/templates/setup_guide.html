@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Proje Kurulum Kılavuzu</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Inter Font Ailesi -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* Inter font'unu varsayılan olarak ayarla */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen py-12 px-4">
+    <div class="max-w-4xl mx-auto bg-white shadow-2xl rounded-2xl overflow-hidden">
+        <!-- Başlık Alanı -->
+        <header class="bg-gradient-to-r from-blue-600 to-indigo-700 p-8">
+            <h1 class="text-4xl font-bold text-white tracking-tight">Proje Kurulum Kılavuzu</h1>
+            <p class="text-lg text-blue-100 mt-2">İlgili taraflar için adım adım görsel rehber.</p>
+        </header>
+
+        <!-- Adımlar Alanı -->
+        <main class="p-8 md:p-12 space-y-12">
+            
+            <!-- Adım 1 -->
+            <section class="step-card bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+                <div class="p-6 md:p-8">
+                    <span class="text-sm font-semibold text-blue-600 bg-blue-100 px-3 py-1 rounded-full">Adım 1</span>
+                    <h2 class="text-3xl font-bold text-gray-900 mt-4 mb-4">
+                        SQL Kimlik Doğrulamasını Aktif Et (Mixed Mode)
+                    </h2>
+                    <p class="text-gray-700 text-lg mb-6">
+                        SQL Server'ın hem Windows hem de SQL kullanıcı ad/parolaları ile giriş kabul etmesi için bu ayarı yapın.
+                    </p>
+                    
+                    <!-- İlk Bölüm: Properties Menüsünü Açma -->
+                    <div class="mb-8">
+                        <h3 class="text-xl font-semibold text-gray-800 mb-4">Properties Menüsünü Açma</h3>
+                        <div class="md:flex gap-6">
+                            <div class="md:w-1/2 mb-4 md:mb-0">
+                                <ol class="list-decimal list-inside space-y-3 text-gray-800">
+                                    <li><strong>SSMS</strong> (SQL Server Management Studio) açın.</li>
+                                    <li>Sol taraftaki 'Object Explorer' panelinde sunucunuza (en üstteki öğe) sağ tıklayın.</li>
+                                    <li>Açılan menüden <strong>'Properties'</strong> seçeneğine tıklayın.</li>
+                                </ol>
+                            </div>
+                            <div class="md:w-1/2 bg-gray-50 p-4 rounded-lg flex items-center justify-center">
+                                <img 
+                                    src="/static/images/WhatsApp Görsel 2025-11-03 saat 23.00.33_0e8da260.jpg" 
+                                    alt="Object Explorer - Properties Menüsü" 
+                                    class="rounded-lg shadow-md border-4 border-white w-full max-w-md"
+                                    onerror="this.src='https://placehold.co/600x400/e2e8f0/94a3b8?text=Görsel+Yüklenemedi'"
+                                >
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- İkinci Bölüm: Security Ayarlarını Yapma -->
+                    <div class="mb-8">
+                        <h3 class="text-xl font-semibold text-gray-800 mb-4">Security Ayarlarını Yapma</h3>
+                        <div class="md:flex gap-6">
+                            <div class="md:w-1/2 mb-4 md:mb-0">
+                                <ol class="list-decimal list-inside space-y-3 text-gray-800">
+                                    <li>Açılan 'Server Properties' penceresinde sol menüden <strong>'Security'</strong> sayfasına gidin.</li>
+                                    <li>'Server authentication' başlığı altında <strong>"SQL Server and Windows Authentication mode"</strong> seçeneğini işaretleyin.</li>
+                                    <li><strong>'OK'</strong> butonuna basarak kaydedin.</li>
+                                    <li>Değişikliğin aktif olması için SQL Server servisini yeniden başlatmanız gerekmektedir.</li>
+                                </ol>
+                            </div>
+                            <div class="md:w-1/2 bg-gray-50 p-4 rounded-lg flex items-center justify-center">
+                                <img 
+                                    src="/static/images/WhatsApp Görsel 2025-11-03 saat 23.00.32_2e508672.jpg" 
+                                    alt="Server Properties - Security Ayarları" 
+                                    class="rounded-lg shadow-md border-4 border-white w-full max-w-md"
+                                    onerror="this.src='https://placehold.co/600x400/e2e8f0/94a3b8?text=Görsel+Yüklenemedi'"
+                                >
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            <!-- Adım 1 Sonu -->
+
+            <!-- Adım 2 -->
+            <section class="step-card bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+                <div class="p-6 md:p-8">
+                    <span class="text-sm font-semibold text-blue-600 bg-blue-100 px-3 py-1 rounded-full">Adım 2</span>
+                    <h2 class="text-3xl font-bold text-gray-900 mt-4 mb-4">
+                        Yeni Kullanıcı (Login) Oluştur
+                    </h2>
+                    <p class="text-gray-700 text-lg mb-6">
+                        SQL Server'da yeni bir kullanıcı (login) hesabı oluşturmak için aşağıdaki adımları takip edin.
+                    </p>
+                    
+                    <!-- İlk Bölüm: New Login Açma -->
+                    <div class="mb-8">
+                        <h3 class="text-xl font-semibold text-gray-800 mb-4">New Login Menüsünü Açma</h3>
+                        <div class="md:flex gap-6">
+                            <div class="md:w-1/2 mb-4 md:mb-0">
+                                <ol class="list-decimal list-inside space-y-3 text-gray-800">
+                                    <li><strong>SSMS</strong> (SQL Server Management Studio) açın.</li>
+                                    <li>Sol taraftaki 'Object Explorer' panelinde <strong>Security</strong> klasörünü genişletin.</li>
+                                    <li><strong>Logins</strong> klasörüne sağ tıklayın.</li>
+                                    <li>Açılan menüden <strong>'New Login...'</strong> seçeneğine tıklayın.</li>
+                                </ol>
+                            </div>
+                            <div class="md:w-1/2 bg-gray-50 p-4 rounded-lg flex items-center justify-center">
+                                <img 
+                                    src="/static/images/2.1.jpg" 
+                                    alt="New Login Menüsü" 
+                                    class="rounded-lg shadow-md border-4 border-white w-full max-w-md"
+                                    onerror="this.src='https://placehold.co/600x400/e2e8f0/94a3b8?text=Görsel+Yüklenemedi'"
+                                >
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- İkinci Bölüm: Login Ayarlarını Yapma -->
+                    <div class="mb-8">
+                        <h3 class="text-xl font-semibold text-gray-800 mb-4">Login Ayarlarını Yapma</h3>
+                        <div class="md:flex gap-6">
+                            <div class="md:w-1/2 mb-4 md:mb-0">
+                                <ol class="list-decimal list-inside space-y-3 text-gray-800">
+                                    <li>Açılan 'Login - New' penceresinde <strong>"SQL Server authentication"</strong> seçeneğini işaretleyin.</li>
+                                    <li><strong>Login name</strong> alanına kullanıcı adınızı girin.</li>
+                                    <li><strong>Password</strong> ve <strong>Confirm password</strong> alanlarına parolanızı girin.</li>
+                                    <li><strong>"Must change password at next login"</strong> kutusunu kaldırın (işaretini kaldırın).</li>
+                                    <li>Gerekirse <strong>"Enforce password policy"</strong> seçeneği açık kalabilir.</li>
+                                    <li>Sol menüden <strong>'Server Roles'</strong> sayfasına gidin. Genelde sadece <strong>'public'</strong> seçili kalır.</li>
+                                    <li><strong>'OK'</strong> butonuna basarak kaydedin.</li>
+                                </ol>
+                            </div>
+                            <div class="md:w-1/2 bg-gray-50 p-4 rounded-lg flex items-center justify-center">
+                                <img 
+                                    src="/static/images/2.2.jpg" 
+                                    alt="Login Ayarları - SQL Server Authentication" 
+                                    class="rounded-lg shadow-md border-4 border-white w-full max-w-md"
+                                    onerror="this.src='https://placehold.co/600x400/e2e8f0/94a3b8?text=Görsel+Yüklenemedi'"
+                                >
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            <!-- Adım 2 Sonu -->
+
+            <!-- Adım 3 -->
+            <section class="step-card bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+                <div class="p-6 md:p-8">
+                    <span class="text-sm font-semibold text-blue-600 bg-blue-100 px-3 py-1 rounded-full">Adım 3</span>
+                    <h2 class="text-3xl font-bold text-gray-900 mt-4 mb-4">
+                        User Mapping ile Veritabanına Bağla ve Yetki Ver
+                    </h2>
+                    <p class="text-gray-700 text-lg mb-6">
+                        Oluşturduğunuz kullanıcıya veritabanı erişimi ve yetkileri vermek için User Mapping ayarlarını yapın.
+                    </p>
+                    
+                    <!-- İlk Bölüm: User Mapping Sekmesine Geçme -->
+                    <div class="mb-8">
+                        <h3 class="text-xl font-semibold text-gray-800 mb-4">User Mapping Sekmesine Geçme</h3>
+                        <div class="md:flex gap-6">
+                            <div class="md:w-1/2 mb-4 md:mb-0">
+                                <ol class="list-decimal list-inside space-y-3 text-gray-800">
+                                    <li>Login penceresinde sol menüden <strong>'User Mapping'</strong> sekmesine geçin.</li>
+                                    <li>İstediğiniz veritabanını listeden seçin.</li>
+                                </ol>
+                            </div>
+                            <div class="md:w-1/2 bg-gray-50 p-4 rounded-lg flex items-center justify-center">
+                                <img 
+                                    src="/static/images/3.1.png" 
+                                    alt="User Mapping Sekmesi - Veritabanı Seçimi" 
+                                    class="rounded-lg shadow-md border-4 border-white w-full max-w-md"
+                                    onerror="this.src='https://placehold.co/600x400/e2e8f0/94a3b8?text=Görsel+Yüklenemedi'"
+                                >
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- İkinci Bölüm: Yetkileri Verme -->
+                    <div class="mb-8">
+                        <h3 class="text-xl font-semibold text-gray-800 mb-4">Yetkileri Verme</h3>
+                        <div class="md:flex gap-6">
+                            <div class="md:w-1/2 mb-4 md:mb-0">
+                                <ol class="list-decimal list-inside space-y-3 text-gray-800">
+                                    <li>Seçilen veritabanının yanındaki <strong>'Database role membership'</strong> bölümünde rol seçimlerini yapın.</li>
+                                    <li><strong>'db_datareader'</strong> rolünü işaretleyin (okuma yetkisi).</li>
+                                    <li><strong>'db_datawriter'</strong> rolünü işaretleyin (yazma yetkisi).</li>
+                                    <li>Tam kontrol isterseniz <strong>'db_owner'</strong> rolünü de seçebilirsiniz.</li>
+                                    <li><strong>'OK'</strong> butonuna basarak ayarları kaydedin.</li>
+                                </ol>
+                            </div>
+                            <div class="md:w-1/2 bg-gray-50 p-4 rounded-lg flex items-center justify-center">
+                                <img 
+                                    src="/static/images/3.2.jpg" 
+                                    alt="User Mapping - Rol Yetkileri" 
+                                    class="rounded-lg shadow-md border-4 border-white w-full max-w-md"
+                                    onerror="this.src='https://placehold.co/600x400/e2e8f0/94a3b8?text=Görsel+Yüklenemedi'"
+                                >
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            <!-- Adım 3 Sonu -->
+
+            <!-- Adım 4 -->
+            <section class="step-card bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+                <div class="p-6 md:p-8">
+                    <span class="text-sm font-semibold text-blue-600 bg-blue-100 px-3 py-1 rounded-full">Adım 4</span>
+                    <h2 class="text-3xl font-bold text-gray-900 mt-4 mb-4">
+                        Uzaktan Bağlantıya İzin Ver
+                    </h2>
+                    <p class="text-gray-700 text-lg mb-6">
+                        SQL Server'ın uzaktan bağlantı kabul etmesi için gerekli ayarları yapın.
+                    </p>
+                    
+                    <!-- Uzaktan Bağlantı Ayarları -->
+                    <div class="mb-8">
+                        <h3 class="text-xl font-semibold text-gray-800 mb-4">Uzaktan Bağlantı Ayarlarını Yapma</h3>
+                        <div class="md:flex gap-6">
+                            <div class="md:w-1/2 mb-4 md:mb-0">
+                                <ol class="list-decimal list-inside space-y-3 text-gray-800">
+                                    <li><strong>SSMS</strong> (SQL Server Management Studio) açın.</li>
+                                    <li>Sol taraftaki 'Object Explorer' panelinde sunucunuza (en üstteki öğe) sağ tıklayın.</li>
+                                    <li>Açılan menüden <strong>'Properties'</strong> seçeneğine tıklayın.</li>
+                                    <li>Açılan 'Server Properties' penceresinde sol menüden <strong>'Connections'</strong> sayfasına gidin.</li>
+                                    <li><strong>"Allow remote connections to this server"</strong> seçeneğinin işaretli olduğundan emin olun.</li>
+                                    <li>Eğer işaretli değilse, kutucuğu işaretleyin.</li>
+                                    <li><strong>'OK'</strong> butonuna basarak ayarları kaydedin.</li>
+                                </ol>
+                            </div>
+                            <div class="md:w-1/2 bg-gray-50 p-4 rounded-lg flex items-center justify-center">
+                                <img 
+                                    src="/static/images/4.1.jpg" 
+                                    alt="Server Properties - Connections Ayarları" 
+                                    class="rounded-lg shadow-md border-4 border-white w-full max-w-md"
+                                    onerror="this.src='https://placehold.co/600x400/e2e8f0/94a3b8?text=Görsel+Yüklenemedi'"
+                                >
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            <!-- Adım 4 Sonu -->
+
+            <!-- Gelecek Adımlar İçin Şablon -->
+            <section class="step-card bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden opacity-50">
+                <div class="p-6 md:p-8">
+                    <span class="text-sm font-semibold text-gray-600 bg-gray-100 px-3 py-1 rounded-full">Adım 5</span>
+                    <h2 class="text-3xl font-bold text-gray-400 mt-4 mb-4">
+                        [Bir Sonraki Adımın Başlığı]
+                    </h2>
+                    <p class="text-gray-500 text-lg mb-6">
+                        [Bir sonraki adımın kısa açıklaması buraya gelecek.]
+                    </p>
+                    <ol class="list-decimal list-inside space-y-3 text-gray-600">
+                        <li>[Talimat 1]</li>
+                        <li>[Talimat 2]</li>
+                        <li>[Talimat 3]</li>
+                    </ol>
+                    <!-- <div class="mt-6 bg-gray-50 p-6 rounded-lg flex items-center justify-center h-64">
+                        <p class="text-gray-400">[Görsel Buraya Gelecek]</p>
+                    </div> -->
+                </div>
+            </section>
+            <!-- Gelecek Adımlar Sonu -->
+
+        </main>
+
+        <!-- Alt Bilgi -->
+        <footer class="bg-gray-800 text-gray-400 text-center p-6">
+            &copy; 2025 Proje Ekibi. Tüm hakları saklıdır.
+        </footer>
+    </div>
+</body>
+</html>
+
