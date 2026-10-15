@@ -34,7 +34,7 @@ from backend.services.ai_service import AIService, AIServiceError, AIUnavailable
 from backend.services.history import HistoryStore
 from backend.services.knowledge import KnowledgeStore
 from backend.services.profiler import profile_database
-from backend.services.query_service import run_question, suggest_tables
+from backend.services.query_service import ConversationStore, run_question, suggest_tables
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +53,7 @@ class AppState:
         self.profiles = ProfileStore()
         self._history: Optional[HistoryStore] = None
         self._knowledge: Optional[KnowledgeStore] = None
+        self.conversations = ConversationStore()
 
     @property
     def knowledge(self) -> KnowledgeStore:
@@ -320,23 +321,34 @@ def get_columns():
 def suggest():
     """Soru yazılırken ilgili tabloları tahmin eder."""
     question = StringUtils.sanitize_input(_body().get("question", ""), Config.MAX_QUERY_LENGTH)
-    return jsonify(ok(suggest_tables(state.manager(), state.history, question)))
+    return jsonify(ok(suggest_tables(state.manager(), state.history, question, knowledge=state.knowledge)))
 
 
 # --- sorgu --------------------------------------------------------------------
 @api_bp.route("/query", methods=["POST"])
 def execute_query():
-    """Soru -> SQL -> doğrula -> çalıştır; hata olursa hatayı modele geri verip yeniden dener."""
+    """Soru -> tablo seçimi (otomatik) -> SQL -> doğrula -> çalıştır. `conversation_id` ile konuşma bağlamı korunur."""
     data = _body()
     question = StringUtils.sanitize_input(data.get("question", ""), Config.MAX_QUERY_LENGTH)
-    tables = [StringUtils.sanitize_input(t) for t in data.get("tables", [])]
+    tables = [StringUtils.sanitize_input(t) for t in data.get("tables") or []]
+    conversation_id = str(data.get("conversation_id") or "")[:64] or None
+    conversation = state.conversations.get(conversation_id)
     try:
-        payload, status = run_question(state.manager(), state.ai_service, state.history, state.knowledge, question, tables)
+        payload, status = run_question(state.manager(), state.ai_service, state.history, state.knowledge,
+                                       question, tables or None, conversation)
     except AIUnavailableError as exc:
         return jsonify(fail(str(exc), "AI_UNAVAILABLE")), 503
     except AIServiceError as exc:
         return jsonify(fail(str(exc), "AI_ERROR")), 502
+    payload["conversation_id"] = conversation_id
     return jsonify(payload), status
+
+
+@api_bp.route("/conversations/<conversation_id>", methods=["DELETE"])
+def reset_conversation(conversation_id: str):
+    """Yeni konuşma: önceki turların bağlamını unutur."""
+    state.conversations.reset(conversation_id)
+    return jsonify(ok(None))
 
 
 # --- geçmiş -------------------------------------------------------------------

@@ -32,7 +32,7 @@ class FakeAI:
         self.calls = []
 
     def generate_sql(self, question, schema, examples=None, previous_sql=None, previous_error=None, dialect=None,
-                     context=""):
+                     context="", turns=None):
         self.calls.append((previous_sql, previous_error, dialect.id if dialect else None))
         return {"sql": self.answers.pop(0), "explanation": "açıklama"}
 
