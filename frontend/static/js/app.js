@@ -591,8 +591,26 @@ class NIQApp {
      */
     async initializeApp() {
         this.showStatus('Uygulama başlatılıyor...', 'info');
-        // App is ready, no initial database connection needed
         this.showStatus('Veritabanı bağlantısı kurulmasını bekliyor...', 'info');
+
+        try {
+            const health = await this.apiCall('/health', 'GET');
+            this.state.aiAvailable = health.data.ai_service_available;
+            if (health.data.database_connected) {
+                // Sunucu tarafında oturum sürüyor (yeniden yükleme / uygulama yeniden açılışı)
+                this.state.isConnected = true;
+                this.elements.tableSelect.disabled = false;
+                const schemaSection = document.getElementById('schema-section');
+                if (schemaSection) schemaSection.style.display = 'block';
+                this.updateConnectionStatus();
+                await this.loadTables();
+            }
+            if (!health.data.ai_service_available) {
+                this.showStatus('AI için API anahtarı gerekli: Ayarlar sayfasından ekleyin.', 'error');
+            }
+        } catch (error) {
+            console.warn('Sağlık kontrolü başarısız:', error);
+        }
         
         // Load saved queries if database is connected and element exists
         if (this.state.isConnected && this.elements.savedQueriesList) {
@@ -606,29 +624,13 @@ class NIQApp {
      * Set database connection
      */
     async setDatabaseConnection() {
-        const driver = (this.elements.dbDriverInput && this.elements.dbDriverInput.value.trim()) || '';
-        const server = (this.elements.dbServerInput && this.elements.dbServerInput.value.trim()) || '';
-        const database = (this.elements.dbDatabaseInput && this.elements.dbDatabaseInput.value.trim()) || '';
-        const username = (this.elements.dbUsernameInput && this.elements.dbUsernameInput.value.trim()) || '';
-        const password = (this.elements.dbPasswordInput && this.elements.dbPasswordInput.value) || '';
-        const connectionString = this.elements.dbConnInput ? this.elements.dbConnInput.value.trim() : '';
-
-        // Prefer field-based secure submission; fallback to full DSN if fields are empty
-        let payload = null;
-        if (server && database && username && password) {
-            payload = {
-                driver: driver || 'ODBC Driver 17 for SQL Server',
-                server,
-                database,
-                uid: username,
-                pwd: password
-            };
-        } else if (connectionString) {
-            payload = { db_conn_str: connectionString };
-        } else {
-            this.showStatus('Lütfen server, database, username ve password girin veya DSN sağlayın', 'error');
+        const payload = window.NIQConnections ? window.NIQConnections.getPayload() : null;
+        const problem = window.NIQConnections ? window.NIQConnections.validate(payload) : 'Bağlantı modülü yüklenemedi';
+        if (problem) {
+            this.showStatus(problem, 'error');
             return;
         }
+        const database = payload.database;
 
         this.setLoading(true);
         this.showStatus('Veritabanı bağlantısı kuruluyor...', 'info');
@@ -637,25 +639,7 @@ class NIQApp {
             const response = await this.apiCall('/set_db', 'POST', payload);
 
             if (response.success) {
-                this.state.isConnected = true;
-                this.state.currentDatabase = database;
-                this.showStatus('Veritabanı bağlantısı başarılı!', 'success');
-                // Clear password input in UI memory for safety
-                if (this.elements.dbPasswordInput) this.elements.dbPasswordInput.value = '';
-                this.elements.tableSelect.disabled = false;
-                
-                // Show schema section when tables are loaded
-                const schemaSection = document.getElementById('schema-section');
-                if (schemaSection) schemaSection.style.display = 'block';
-                
-                // Update dashboard stats
-                this.updateDashboardStats();
-                
-                await this.loadTables();
-                // Load saved queries after connection if element exists
-                if (this.elements.savedQueriesList) {
-                    await this.loadSavedQueries();
-                }
+                await this.onConnected(database);
             } else {
                 this.showStatus(`Bağlantı hatası: ${response.error}`, 'error');
             }
@@ -663,6 +647,25 @@ class NIQApp {
             this.showStatus(`Bağlantı hatası: ${error.message}`, 'error');
         } finally {
             this.setLoading(false);
+        }
+    }
+
+    /**
+     * Bağlantı kurulduktan sonra arayüzü hazırlar (yeni bağlantı veya kayıtlı profil)
+     */
+    async onConnected(databaseName) {
+        this.state.isConnected = true;
+        this.state.currentDatabase = String(databaseName || '').split(/[\\/]/).pop();
+        this.showStatus('Veritabanı bağlantısı başarılı!', 'success');
+        if (this.elements.dbPasswordInput) this.elements.dbPasswordInput.value = '';
+        this.elements.tableSelect.disabled = false;
+        const schemaSection = document.getElementById('schema-section');
+        if (schemaSection) schemaSection.style.display = 'block';
+        this.updateConnectionStatus();
+        this.updateDashboardStats();
+        await this.loadTables();
+        if (this.elements.savedQueriesList) {
+            await this.loadSavedQueries();
         }
     }
 
@@ -803,6 +806,10 @@ class NIQApp {
                 this.showStatus(`Sorgu hatası: ${response.error}`, 'error');
             }
         } catch (error) {
+            if (error.payload) {
+                this.displayResults(error.payload);
+                this.saveQueryToHistory(question, false, error.payload.sql);
+            }
             this.showStatus(`Sorgu hatası: ${error.message}`, 'error');
         } finally {
             this.setLoading(false);
@@ -813,64 +820,67 @@ class NIQApp {
      * Display query results
      */
     displayResults(response) {
-        if (response.success) {
-            if (response.results) {
-                // SELECT query results
-                this.displayTableResults(response.results, response.sql);
-            } else if (response.message) {
-                // Non-SELECT query results
-                this.displayMessageResult(response.message, response.sql);
-            }
+        if (response.success && response.results) {
+            this.displayTableResults(response.results, response.sql, response);
+        } else if (response.success) {
+            this.displayMessageResult(response.message || 'Tamamlandı', response.sql);
         } else {
-            // Error results
-            this.displayErrorResult(response.error, response.sql);
+            this.displayErrorResult(response.error, response.sql, response);
         }
+    }
+
+    /**
+     * Render the SQL block (escaped) with the model's explanation
+     */
+    renderSqlBlock(sql, meta = {}) {
+        const explanation = meta.explanation ? `<p class="ai-explanation">${this.escapeHtml(meta.explanation)}</p>` : '';
+        const retried = meta.attempts > 1 ? `<p class="ai-note">AI sorguyu ${meta.attempts} denemede düzeltti.</p>` : '';
+        return `
+            <div class="sql-query">
+                <strong>SQL:</strong>
+                <pre>${this.escapeHtml(sql || 'SQL oluşturulamadı')}</pre>
+            </div>
+            ${explanation}${retried}`;
     }
 
     /**
      * Display table results
      */
-    displayTableResults(results, sql) {
+    displayTableResults(results, sql, meta = {}) {
+        const analysis = meta.analysis && (meta.analysis.summary || meta.analysis.analysis)
+            ? `<div class="ai-analysis"><strong>AI yorumu</strong><p>${this.escapeHtml(meta.analysis.summary)}</p><p>${this.escapeHtml(meta.analysis.analysis)}</p></div>`
+            : '';
+        const truncated = meta.truncated
+            ? '<p class="ai-note">Sonuç satır limitine takıldı; tüm satırlar gösterilmiyor (Ayarlar > Satır limiti).</p>'
+            : '';
+
         if (results.length === 0) {
             this.elements.resultsDiv.innerHTML = `
                 <div class="result-section">
                     <h3>Sorgu Sonuçları</h3>
-                    <div class="sql-query">
-                        <strong>SQL:</strong>
-                        <pre>${sql}</pre>
-                    </div>
-                    <div class="no-results">
-                        <p>Sorgu sonucu bulunamadı</p>
-                    </div>
-                </div>
-            `;
+                    ${this.renderSqlBlock(sql, meta)}
+                    <div class="no-results"><p>Sorgu sonucu bulunamadı</p></div>
+                </div>`;
             return;
         }
 
         const headers = Object.keys(results[0]);
-        const tableRows = results.map(row => 
+        const tableRows = results.map(row =>
             `<tr>${headers.map(header => `<td>${this.escapeHtml(row[header])}</td>`).join('')}</tr>`
         ).join('');
 
         this.elements.resultsDiv.innerHTML = `
             <div class="result-section">
                 <h3>Sorgu Sonuçları (${results.length} satır)</h3>
-                <div class="sql-query">
-                    <strong>SQL:</strong>
-                    <pre>${sql}</pre>
-                </div>
+                ${this.renderSqlBlock(sql, meta)}
+                ${analysis}${truncated}
                 <div class="table-container">
                     <table class="results-table">
-                        <thead>
-                            <tr>${headers.map(header => `<th>${this.escapeHtml(header)}</th>`).join('')}</tr>
-                        </thead>
-                        <tbody>
-                            ${tableRows}
-                        </tbody>
+                        <thead><tr>${headers.map(header => `<th>${this.escapeHtml(header)}</th>`).join('')}</tr></thead>
+                        <tbody>${tableRows}</tbody>
                     </table>
                 </div>
-            </div>
-        `;
+            </div>`;
     }
 
     /**
@@ -880,33 +890,21 @@ class NIQApp {
         this.elements.resultsDiv.innerHTML = `
             <div class="result-section">
                 <h3>Sorgu Tamamlandı</h3>
-                <div class="sql-query">
-                    <strong>SQL:</strong>
-                    <pre>${sql}</pre>
-                </div>
-                <div class="message-result">
-                    <p>${message}</p>
-                </div>
-            </div>
-        `;
+                ${this.renderSqlBlock(sql)}
+                <div class="message-result"><p>${this.escapeHtml(message)}</p></div>
+            </div>`;
     }
 
     /**
      * Display error result
      */
-    displayErrorResult(error, sql) {
+    displayErrorResult(error, sql, meta = {}) {
         this.elements.resultsDiv.innerHTML = `
             <div class="result-section">
                 <h3>Sorgu Hatası</h3>
-                <div class="sql-query">
-                    <strong>SQL:</strong>
-                    <pre>${sql || 'SQL oluşturulamadı'}</pre>
-                </div>
-                <div class="error-result">
-                    <p><strong>Hata:</strong> ${this.escapeHtml(error)}</p>
-                </div>
-            </div>
-        `;
+                ${this.renderSqlBlock(sql, meta)}
+                <div class="error-result"><p><strong>Hata:</strong> ${this.escapeHtml(error)}</p></div>
+            </div>`;
     }
 
     /**
@@ -993,7 +991,9 @@ class NIQApp {
         const result = await response.json();
 
         if (!response.ok) {
-            throw new Error(result.error || 'API call failed');
+            const error = new Error(result.error || 'API call failed');
+            error.payload = result;
+            throw error;
         }
 
         return result;

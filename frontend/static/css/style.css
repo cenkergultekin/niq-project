@@ -2682,3 +2682,28 @@ label {
 .ip-help-btn:hover { background: #dbe4ff; }
 .ip-help-btn:active { transform: translateY(1px); }
 .ip-help-btn.pulse { animation: pulse-glow 1.8s infinite; }
+
+/* AI sonuç notları ve ayarlar */
+.ai-explanation { margin: 0.5rem 0; color: var(--text-secondary, #555); font-style: italic; }
+.ai-note { margin: 0.5rem 0; font-size: 0.85rem; color: var(--text-secondary, #777); }
+.ai-analysis { margin: 0.75rem 0; padding: 0.75rem 1rem; border-left: 3px solid var(--primary, #2563eb); background: rgba(37, 99, 235, 0.06); border-radius: 6px; }
+.ai-analysis p { margin: 0.35rem 0 0; }
+.checkbox-row { display: flex; gap: 0.5rem; align-items: flex-start; margin: 0.6rem 0; font-size: 0.9rem; }
+.checkbox-row input { margin-top: 0.2rem; }
+.status-message.success { color: #15803d; }
+.status-message.error { color: #b91c1c; }
+
+/* Bağlantı sihirbazı */
+.step-title { margin: 1.25rem 0 0.5rem; font-size: 0.95rem; font-weight: 600; opacity: 0.8; }
+.chip-row { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.5rem 0; }
+.chip { padding: 0.45rem 0.9rem; border: 1px solid rgba(0,0,0,0.15); border-radius: 999px; background: transparent; cursor: pointer; font: inherit; font-size: 0.85rem; }
+.chip:hover { border-color: #4169e1; }
+.chip.active { background: #4169e1; color: #fff; border-color: #4169e1; }
+.chip.missing { opacity: 0.5; }
+.diag-list { list-style: none; padding: 0; margin: 0.75rem 0; }
+.diag-list li { padding: 0.5rem 0.75rem; margin-bottom: 0.4rem; border-radius: 6px; background: rgba(0,0,0,0.04); font-size: 0.9rem; }
+.diag-list li.ok { border-left: 3px solid #15803d; }
+.diag-list li.fail { border-left: 3px solid #b91c1c; }
+.diag-list li.warn { border-left: 3px solid #b45309; }
+.diag-list li.skip { border-left: 3px solid #9ca3af; }
+.diag-list .diag-hint { display: block; margin-top: 0.25rem; opacity: 0.8; font-size: 0.85rem; }

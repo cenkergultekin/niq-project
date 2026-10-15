@@ -1,40 +1,23 @@
-# Core Flask dependencies (Python 3.10+ compatible)
-Flask>=2.2.5
-Werkzeug>=3.1.3
+# Çalışma zamanı bağımlılıkları
+Flask>=3.0
+Werkzeug>=3.0
+waitress>=3.0
 
-# Database connectivity
-pyodbc>=5.2.0
+# Veritabanı (SQLAlchemy + türe göre sürücü)
+sqlalchemy>=2.0
+pyodbc>=5.2.0            # SQL Server
+psycopg[binary]>=3.1     # PostgreSQL
+pymysql>=1.1             # MySQL / MariaDB
 keyring>=25.2.0
+pywin32-ctypes>=0.2.2; sys_platform == "win32"
 
-# AI/ML services
+# AI (OpenAI / OpenRouter / yerel OpenAI-uyumlu sunucular)
 openai>=2.3.0
-
-# Environment management
-python-dotenv>=1.1.1
-
-# Desktop GUI (PyQt5)
-PyQt5>=5.15.10
-PyQtWebEngine>=5.15.6
 requests>=2.31.0
+python-dotenv>=1.0.0
 
-# Task scheduling
+# SQL doğrulama (AST)
+sqlglot>=25.0
 
-# Development dependencies (optional)
-pytest>=8.4.2
-pytest-flask>=1.3.0
-black>=21.12b0
-flake8>=4.0.1
-mypy>=0.910
-
-# Production server (optional)
-gunicorn>=23.0.0
-
-# Windows production server (optional)
-waitress>=2.1.2
-
-# Monitoring & structured logging (optional)
-prometheus-client>=0.20.0
-structlog>=24.4.0
-
-# Windows keyring backend helpers (Windows only; usually pulled transitively)
-pywin32-ctypes>=0.2.2
+# Masaüstü arayüz
+PySide6-Essentials>=6.7

@@ -33,6 +33,10 @@
                     <span class="sidebar-nav-icon"></span>
                     <span>Grafikler</span>
                 </button>
+                <button class="sidebar-nav-item" data-page="settings-page">
+                    <span class="sidebar-nav-icon"></span>
+                    <span>Ayarlar</span>
+                </button>
             </nav>
         </aside>
 
@@ -151,17 +155,25 @@
                 <!-- Database Connection Section -->
                 <section class="section" id="db-section">
                     <h2>Veritabanı Bağlantısı</h2>
-                    
+
+                    <div id="saved-connections" class="chip-row" style="display:none"></div>
+                    <div id="discovered-servers" class="chip-row" style="display:none"></div>
+
+                    <h3 class="step-title">Tür</h3>
+                    <div id="db-types" class="chip-row"></div>
+                    <small id="db-type-hint" class="help-text"></small>
+
+                    <h3 class="step-title">Bilgiler</h3>
+                    <div class="input-group">
+                        <label for="db_paste">Hızlı doldur (opsiyonel)</label>
+                        <input type="text" id="db_paste" class="input-field" autocomplete="off"
+                               placeholder="Bağlantı URL'si, ODBC dizesi veya dosya yolu yapıştırın; alanlar otomatik dolar">
+                    </div>
                     <div class="form-grid">
-                        <div class="input-group">
-                            <label for="db_server">Server</label>
-                            <input 
-                                type="text" 
-                                id="db_server" 
-                                placeholder="192.168.56.1 veya sunucu adı"
-                                class="input-field"
-                                autocomplete="off"
-                            >
+                        <div class="input-group" data-field="host">
+                            <label for="db_server">Sunucu</label>
+                            <input type="text" id="db_server" list="db-host-list" placeholder="localhost" class="input-field" autocomplete="off">
+                            <datalist id="db-host-list"></datalist>
                             <button type="button" id="ip-help-toggle" class="ip-help-btn pulse">IP öğren</button>
                             <div class="server-hint-box" style="display:none">
                                 <span class="server-hint-message">
@@ -175,72 +187,54 @@
                                 </span>
                             </div>
                         </div>
-                        <div class="input-group">
-                            <label for="db_database">Database</label>
-                            <input 
-                                type="text" 
-                                id="db_database" 
-                                placeholder="Veritabanı adı"
-                                class="input-field"
-                                autocomplete="off"
-                            >
+                        <div class="input-group" data-field="port">
+                            <label for="db_port">Port</label>
+                            <input type="number" id="db_port" class="input-field" min="1" max="65535" autocomplete="off">
                         </div>
-                        <div class="input-group">
-                            <label for="db_username">Username</label>
-                            <input 
-                                type="text" 
-                                id="db_username" 
-                                placeholder="Kullanıcı adı"
-                                class="input-field"
-                                autocomplete="username"
-                            >
+                        <div class="input-group" data-field="database">
+                            <label for="db_database" id="db_database_label">Veritabanı</label>
+                            <input type="text" id="db_database" class="input-field" autocomplete="off" placeholder="Veritabanı adı">
+                            <button type="button" id="db-list-btn" class="ip-help-btn" data-field-only="server">Veritabanlarını getir</button>
+                            <select id="db-list-select" class="select-field" style="display:none"></select>
                         </div>
-                        <div class="input-group">
-                            <label for="db_password">Password</label>
-                            <input 
-                                type="password" 
-                                id="db_password" 
-                                placeholder="Parola"
-                                class="input-field"
-                                autocomplete="current-password"
-                            >
+                        <div class="input-group" data-field="user">
+                            <label for="db_username">Kullanıcı adı</label>
+                            <input type="text" id="db_username" class="input-field" autocomplete="username" placeholder="Kullanıcı adı">
+                        </div>
+                        <div class="input-group" data-field="password">
+                            <label for="db_password">Parola</label>
+                            <input type="password" id="db_password" class="input-field" autocomplete="current-password" placeholder="Parola">
                         </div>
                     </div>
-                    
-                    <div class="advanced-options">
+                    <small id="db-permission-hint" class="help-text"></small>
+
+                    <div class="advanced-options" data-field="advanced">
                         <details>
                             <summary>Gelişmiş Ayarlar</summary>
-                            <div class="input-group">
-                                <label for="db_driver">Driver</label>
-                                <input 
-                                    type="text" 
-                                    id="db_driver" 
-                                    placeholder="ODBC Driver 17 for SQL Server"
-                                    class="input-field"
-                                    value="ODBC Driver 17 for SQL Server"
-                                >
+                            <div class="input-group" id="db_driver_group">
+                                <label for="db_driver">ODBC sürücüsü</label>
+                                <input type="text" id="db_driver" class="input-field" placeholder="Boş bırakın: yüklü en yeni sürücü seçilir">
                             </div>
                             <div class="input-group">
-                                <label for="db_conn">Connection String (opsiyonel)</label>
-                                <input 
-                                    type="text" 
-                                    id="db_conn" 
-                                    placeholder="DRIVER={...};SERVER=...;DATABASE=...;UID=...;PWD=..."
-                                    class="input-field"
-                                >
+                                <label for="db_profile_name">Profil adı (kaydederken)</label>
+                                <input type="text" id="db_profile_name" class="input-field" placeholder="örn. Üretim raporlama">
                             </div>
+                            <input type="hidden" id="db_conn">
                         </details>
                     </div>
-                    
+
+                    <h3 class="step-title">Test</h3>
                     <div class="button-group">
-                        <button id="set-db-btn" class="btn btn-primary">
-                            Bağlan
-                        </button>
-                        <button id="clear-db-btn" class="btn btn-secondary">
-                            <span></span> Temizle
-                        </button>
+                        <button id="db-test-btn" class="btn btn-secondary" type="button">Bağlantıyı Test Et</button>
                     </div>
-                    
+                    <ul id="db-diagnostics" class="diag-list"></ul>
+
+                    <h3 class="step-title">Bağlan</h3>
+                    <div class="button-group">
+                        <button id="set-db-btn" class="btn btn-primary">Bağlan</button>
+                        <button id="db-save-btn" class="btn btn-secondary" type="button">Profili Kaydet</button>
+                        <button id="clear-db-btn" class="btn btn-secondary">Bağlantıyı Kapat</button>
+                    </div>
                     <div id="db-status" class="status-message"></div>
                 </section>
 
@@ -369,6 +363,61 @@
                 </section>
             </div>
 
+            <!-- Settings Page -->
+            <div id="settings-page" class="page-content">
+                <section class="section" id="ai-settings-section">
+                    <h2>AI Ayarları</h2>
+                    <div class="form-grid">
+                        <div class="input-group">
+                            <label for="set_provider">Sağlayıcı</label>
+                            <select id="set_provider" class="select-field"></select>
+                        </div>
+                        <div class="input-group">
+                            <label for="set_model">Model</label>
+                            <select id="set_model" class="select-field"></select>
+                            <small id="set_model_price" class="help-text"></small>
+                        </div>
+                        <div class="input-group" id="set_custom_model_group">
+                            <label for="set_model_custom">Özel model adı (opsiyonel)</label>
+                            <input type="text" id="set_model_custom" class="input-field" placeholder="örn. anthropic/claude-haiku-5.5" autocomplete="off">
+                        </div>
+                        <div class="input-group" id="set_key_group">
+                            <label for="set_api_key">API anahtarı</label>
+                            <input type="password" id="set_api_key" class="input-field" autocomplete="off" placeholder="">
+                            <small class="help-text">İşletim sisteminin güvenli deposunda (Windows Credential Manager) saklanır, dosyaya yazılmaz.</small>
+                        </div>
+                        <div class="input-group" id="set_base_url_group" style="display:none">
+                            <label for="set_base_url">Yerel sunucu adresi</label>
+                            <input type="text" id="set_base_url" class="input-field" autocomplete="off">
+                        </div>
+                    </div>
+                    <div class="advanced-options">
+                        <details>
+                            <summary>Gelişmiş</summary>
+                            <div class="form-grid">
+                                <div class="input-group">
+                                    <label for="set_max_tokens">Çıktı belirteç limiti</label>
+                                    <input type="number" id="set_max_tokens" class="input-field" min="256" max="16000" step="256">
+                                    <small class="help-text">Düşünen modeller görünmeyen belirteçleri de bu limitten harcar; cevap kesilirse artırın.</small>
+                                </div>
+                                <div class="input-group">
+                                    <label for="set_row_limit">Satır limiti</label>
+                                    <input type="number" id="set_row_limit" class="input-field" min="1" max="10000">
+                                </div>
+                            </div>
+                            <label class="checkbox-row"><input type="checkbox" id="set_ai_analysis"> Sonuçların ilk 20 satırını AI'a gönderip yorum üret (veri sağlayıcıya gider)</label>
+                            <label class="checkbox-row"><input type="checkbox" id="set_trust_cert"> Sunucu sertifikasına güven (ODBC Driver 18, yerel/öz imzalı sunucular)</label>
+                        </details>
+                    </div>
+                    <div class="button-group">
+                        <button id="set_save_btn" class="btn btn-primary">Kaydet</button>
+                        <button id="set_test_btn" class="btn btn-secondary">Bağlantıyı Test Et</button>
+                        <button id="set_clear_key_btn" class="btn btn-secondary">Anahtarı Sil</button>
+                    </div>
+                    <div id="settings-status" class="status-message"></div>
+                </section>
+            </div>
+
             </main>
 
             <footer class="footer">
@@ -378,5 +427,7 @@
     </div>
 
     <script src="/static/js/app.js"></script>
+    <script src="/static/js/connections.js"></script>
+    <script src="/static/js/settings.js"></script>
 </body>
 </html>
