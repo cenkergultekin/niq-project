@@ -15,6 +15,9 @@ CRITICAL_ACTIONS = {
     "clear_api_key": "Kayıtlı AI API anahtarını sil",
     "trust_ssh_host": "SSH sunucusunun parmak izine güven ve kaydet",
     "enable_value_samples": "Kolonların örnek değerlerini (durum kodları, ülkeler gibi) AI sağlayıcısına göndermeyi aç",
+    "create_schedule": "Zamanlanmış rapor/uyarı oluştur (uygulama açıkken kendiliğinden çalışır, sonuçları seçili kanallara gönderir)",
+    "delete_job": "Zamanlanmış işi ve geçmiş çalışmalarını sil",
+    "configure_notifications": "Bildirim kanalını (Telegram/webhook) ayarla: sonuç verileri bu kanala gönderilebilir",
     "enable_ai_analysis": "Sonuç satırlarının ilk 20 satırını AI sağlayıcısına göndermeyi aç",
 }
 

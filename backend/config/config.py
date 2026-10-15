@@ -108,6 +108,10 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     "ai_value_samples": False,
     # ODBC Driver 18 varsayılan olarak şifreler; yerel/öz imzalı sertifika için
     "trust_server_cert": True,
+    # Bildirim kanalları (Telegram bot belirteci keyring'de, burada yalnızca sohbet kimliği)
+    "notify": {"telegram_chat_id": "", "webhook_url": ""},
+    # Sesli sorgu: konuşmayı metne çeviren model (OpenRouter/OpenAI)
+    "stt_model": "google/gemini-3.5-flash-lite",
 }
 
 
@@ -130,6 +134,8 @@ class Settings:
         for key, value in stored.items():
             if key == "models" and isinstance(value, dict):
                 merged["models"].update({k: v for k, v in value.items() if isinstance(v, str) and v})
+            elif key == "notify" and isinstance(value, dict):
+                merged["notify"].update({k: v for k, v in value.items() if k in merged["notify"]})
             elif key in merged:
                 merged[key] = value
         return merged
@@ -141,6 +147,8 @@ class Settings:
             for key, value in updates.items():
                 if key == "models" and isinstance(value, dict):
                     current["models"].update(value)
+                elif key == "notify" and isinstance(value, dict):
+                    current["notify"].update({k: v for k, v in value.items() if k in current["notify"]})
                 elif key in current:
                     current[key] = value
             cls._path().write_text(json.dumps(current, ensure_ascii=False, indent=2), encoding="utf-8")

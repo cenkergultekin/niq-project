@@ -16,6 +16,7 @@ from PySide6.QtWidgets import QApplication, QMainWindow, QMessageBox
 from waitress.server import create_server
 
 from app import app as flask_app
+from backend.services.jobs import start_background_services
 
 logger = logging.getLogger("niq.desktop")
 APP_VERSION = "3.0"
@@ -143,6 +144,7 @@ def main() -> None:
     qt_app.setApplicationName("NIQ")
     qt_app.setApplicationVersion(APP_VERSION)
     qt_app.setStyle("Fusion")
+    start_background_services()
     window = NIQDesktopApp()
     window.show()
     sys.exit(qt_app.exec())
