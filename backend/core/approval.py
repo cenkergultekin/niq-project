@@ -14,6 +14,7 @@ CRITICAL_ACTIONS = {
     "delete_connection": "Bağlantı profilini ve kayıtlı parolasını sil",
     "clear_api_key": "Kayıtlı AI API anahtarını sil",
     "trust_ssh_host": "SSH sunucusunun parmak izine güven ve kaydet",
+    "enable_value_samples": "Kolonların örnek değerlerini (durum kodları, ülkeler gibi) AI sağlayıcısına göndermeyi aç",
     "enable_ai_analysis": "Sonuç satırlarının ilk 20 satırını AI sağlayıcısına göndermeyi aç",
 }
 

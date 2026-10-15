@@ -12,6 +12,7 @@ from backend.db.connector import Connector
 from backend.models.models import SavedQuery
 from backend.services.ai_service import AIService
 from backend.services.history import HistoryStore
+from backend.services.knowledge import KnowledgeStore
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +20,8 @@ SMALL_SCHEMA = 6  # bu kadar ya da daha az tablo varsa ad eşleşmezse hepsi ön
 
 
 def run_question(
-    connector: Connector, ai: AIService, history: HistoryStore, question: str, tables: List[str],
+    connector: Connector, ai: AIService, history: HistoryStore, knowledge: KnowledgeStore, question: str,
+    tables: List[str],
 ) -> Tuple[Dict[str, Any], int]:
     """Soruyu cevaplar. Dönüş: (yanıt gövdesi, HTTP durum kodu). AI hataları fırlatılır."""
     if not question:
@@ -36,7 +38,8 @@ def run_question(
 
     schema = connector.get_database_schema(tables)
     settings = Settings.load()
-    examples = history.examples(connector.db_key, tables)
+    examples = history.examples(connector.db_key, question)
+    context = knowledge.prompt_context(connector.db_key, tables, question, bool(settings.get("ai_value_samples")))
     dialect = connector.dialect
 
     previous_sql = previous_error = None
@@ -44,7 +47,7 @@ def run_question(
     response = None
     attempts = 0
     for attempts in range(1, Config.REPAIR_ATTEMPTS + 2):
-        answer = ai.generate_sql(question, schema, examples, previous_sql, previous_error, dialect=dialect)
+        answer = ai.generate_sql(question, schema, examples, previous_sql, previous_error, dialect=dialect, context=context)
         sql, explanation = answer["sql"], answer["explanation"]
 
         guard = validate_sql(sql, allowed_tables=tables, dialect_id=dialect.id, database=connector.profile.database)

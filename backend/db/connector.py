@@ -195,6 +195,14 @@ class Connector:
                 self._schema_cache.clear()
             return list(self._table_cache)
 
+    def quote_table(self, name: str) -> str:
+        """Tablo adını türe uygun alıntılar ('schema.table' dahil)."""
+        preparer = self.engine.dialect.identifier_preparer
+        schema, table = self._split(name)
+        if "." in name and self.profile.type not in ("mysql", "sqlite"):
+            return f"{preparer.quote_schema(schema)}.{preparer.quote(table)}"
+        return preparer.quote(table)
+
     def _split(self, name: str):
         """'schema.table' -> (schema, table); varsayılan şema için (None/varsayılan, table)."""
         if "." in name and self.profile.type not in ("mysql", "sqlite"):

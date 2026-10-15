@@ -2,6 +2,7 @@
 HTTP API: bağlantı, tablolar, doğal dil sorgusu, geçmiş, ayarlar ve sağlık.
 """
 import logging
+import threading
 from dataclasses import asdict
 from typing import Any, Dict, Optional, Tuple
 
@@ -10,6 +11,7 @@ from werkzeug.exceptions import HTTPException
 
 from backend.config.config import PROVIDERS, Config, Settings
 from backend.core.approval import ApprovalRequired, require_approval
+from backend.core.sql_guard import validate_sql
 from backend.core.utils import ResponseFormatter, StringUtils, ValidationError
 from backend.db import diagnostics
 from backend.db.connector import Connector, friendly_error
@@ -30,6 +32,8 @@ from backend.db.tunnel import HostKeyUnknown
 from backend.services import models_catalog
 from backend.services.ai_service import AIService, AIServiceError, AIUnavailableError
 from backend.services.history import HistoryStore
+from backend.services.knowledge import KnowledgeStore
+from backend.services.profiler import profile_database
 from backend.services.query_service import run_question, suggest_tables
 
 logger = logging.getLogger(__name__)
@@ -48,6 +52,26 @@ class AppState:
         self.ai_service = AIService()
         self.profiles = ProfileStore()
         self._history: Optional[HistoryStore] = None
+        self._knowledge: Optional[KnowledgeStore] = None
+
+    @property
+    def knowledge(self) -> KnowledgeStore:
+        if self._knowledge is None:
+            self._knowledge = KnowledgeStore()
+        return self._knowledge
+
+    def _profile_in_background(self, profile: Profile) -> None:
+        """Bağlandıktan sonra veri profili henüz yoksa arka planda çıkarır (yerelde, salt-okunur)."""
+        def work():
+            connector = Connector(profile)
+            try:
+                if self.knowledge.profiled_tables(connector.db_key) == 0:
+                    profile_database(connector, self.knowledge)
+            except Exception as exc:
+                logger.info("Arka plan profili çıkarılamadı: %s", exc)
+            finally:
+                connector.close()
+        threading.Thread(target=work, daemon=True).start()
 
     @property
     def history(self) -> HistoryStore:
@@ -74,6 +98,7 @@ class AppState:
         self.connector = Connector(profile)
         session["PROFILE"] = asdict(profile)
         session.permanent = True
+        self._profile_in_background(profile)
 
     def manager(self) -> Connector:
         if not self.connector:
@@ -306,7 +331,7 @@ def execute_query():
     question = StringUtils.sanitize_input(data.get("question", ""), Config.MAX_QUERY_LENGTH)
     tables = [StringUtils.sanitize_input(t) for t in data.get("tables", [])]
     try:
-        payload, status = run_question(state.manager(), state.ai_service, state.history, question, tables)
+        payload, status = run_question(state.manager(), state.ai_service, state.history, state.knowledge, question, tables)
     except AIUnavailableError as exc:
         return jsonify(fail(str(exc), "AI_UNAVAILABLE")), 503
     except AIServiceError as exc:
@@ -338,6 +363,85 @@ def delete_saved_query(query_id: int):
     return jsonify(ok(None, f"Sorgu #{query_id} başarıyla silindi."))
 
 
+# --- bilgi katmanı: sözlük, notlar, profil -----------------------------------------
+@api_bp.route("/knowledge/glossary", methods=["GET"])
+def list_glossary():
+    return jsonify(ok(state.knowledge.list_glossary(state.manager().db_key)))
+
+
+@api_bp.route("/knowledge/glossary", methods=["POST"])
+def add_glossary_term():
+    data = _body()
+    try:
+        term_id = state.knowledge.add_term(
+            state.manager().db_key, str(data.get("term", "")), str(data.get("definition", "")), str(data.get("sql_hint", "")))
+    except ValueError as exc:
+        raise ValidationError(str(exc)) from exc
+    return jsonify(ok({"id": term_id}, "Sözlüğe eklendi."))
+
+
+@api_bp.route("/knowledge/glossary/<int:term_id>", methods=["DELETE"])
+def delete_glossary_term(term_id: int):
+    if not state.knowledge.delete_term(state.manager().db_key, term_id):
+        return jsonify(fail("Terim bulunamadı.")), 404
+    return jsonify(ok(None, "Silindi."))
+
+
+@api_bp.route("/knowledge/notes", methods=["GET"])
+def get_table_notes():
+    return jsonify(ok(state.knowledge.get_notes(state.manager().db_key)))
+
+
+@api_bp.route("/knowledge/notes", methods=["POST"])
+def set_table_note():
+    data = _body()
+    table = StringUtils.sanitize_input(str(data.get("table", "")))
+    if table not in state.manager().get_tables():
+        raise ValidationError("Tablo bulunamadı")
+    state.knowledge.set_note(state.manager().db_key, table, StringUtils.sanitize_input(str(data.get("note", "")), 500))
+    return jsonify(ok(None, "Not kaydedildi."))
+
+
+@api_bp.route("/knowledge/profile", methods=["POST"])
+def run_profile():
+    """Tabloları örnekleyip az çeşitlilikli kolon değerlerini yerelde çıkarır."""
+    connector = state.manager()
+    summary = profile_database(connector, state.knowledge)
+    return jsonify(ok(summary, f"{summary['tables']} tablo profillendi."))
+
+
+# --- düzelt ve öğren -----------------------------------------------------------------
+@api_bp.route("/queries/<int:query_id>/verify", methods=["POST"])
+def verify_query(query_id: int):
+    """'Bu doğru' işareti: doğrulanmış sorular sonraki sorularda öncelikli örnek olur."""
+    verified = bool((request.get_json(silent=True) or {}).get("verified", True))
+    if not state.history.set_verified(state.manager().db_key, query_id, verified):
+        return jsonify(fail(f"Sorgu #{query_id} bulunamadı.")), 404
+    return jsonify(ok({"verified": verified}))
+
+
+@api_bp.route("/queries/<int:query_id>", methods=["PUT"])
+def edit_query(query_id: int):
+    """Kullanıcı SQL'i düzeltir: aynı güvenlik katmanıyla çalıştırılır, çalışırsa doğrulanmış örnek olur."""
+    connector = state.manager()
+    sql = str(_body().get("sql", "")).strip()
+    existing = state.history.get(connector.db_key, query_id)
+    if not existing:
+        return jsonify(fail(f"Sorgu #{query_id} bulunamadı.")), 404
+    guard = validate_sql(sql, allowed_tables=connector.get_tables(), dialect_id=connector.dialect.id,
+                         database=connector.profile.database)
+    if not guard.ok:
+        return jsonify(fail(guard.error or "SQL geçersiz")), 400
+    response = connector.execute_readonly(guard.sql, int(Settings.load()["row_limit"]))
+    tables = sorted(guard.tables or [])
+    state.history.update_sql(connector.db_key, query_id, guard.sql, tables or existing.tables_used,
+                             response.is_successful, response.error, response.results)
+    if not response.is_successful:
+        return jsonify({**fail(response.error or "Sorgu çalışmadı"), "sql": guard.sql}), 400
+    return jsonify({"success": True, "sql": guard.sql, "results": response.results, "row_count": len(response.results),
+                    "truncated": response.truncated, "verified": True, "query_id": query_id})
+
+
 # --- ayarlar ------------------------------------------------------------------
 def _settings_payload() -> Dict[str, Any]:
     settings = Settings.load()
@@ -352,6 +456,7 @@ def _settings_payload() -> Dict[str, Any]:
         "max_output_tokens": settings["max_output_tokens"],
         "row_limit": settings["row_limit"],
         "ai_analysis": settings["ai_analysis"],
+        "ai_value_samples": settings["ai_value_samples"],
         "trust_server_cert": settings["trust_server_cert"],
     }
 
@@ -384,11 +489,13 @@ def update_settings():
             except (TypeError, ValueError):
                 raise ValidationError(f"{key} sayı olmalı") from None
             updates[key] = min(max(value, low), high)
-    for key in ("ai_analysis", "trust_server_cert"):
+    for key in ("ai_analysis", "ai_value_samples", "trust_server_cert"):
         if key in data:
             updates[key] = bool(data[key])
     if updates.get("ai_analysis") and not Settings.load()["ai_analysis"]:
         require_approval(data, "enable_ai_analysis")
+    if updates.get("ai_value_samples") and not Settings.load()["ai_value_samples"]:
+        require_approval(data, "enable_value_samples")
     if "local_base_url" in data:
         url = str(data["local_base_url"]).strip()
         if url and not url.startswith(("http://", "https://")):

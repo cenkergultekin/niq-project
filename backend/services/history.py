@@ -13,7 +13,7 @@ import threading
 from contextlib import contextmanager
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 from backend.config.config import Config, data_dir
 from backend.models.models import SavedQuery
@@ -64,6 +64,9 @@ class HistoryStore:
                 )"""
             )
             conn.execute("CREATE INDEX IF NOT EXISTS idx_queries_db ON queries(db_key, created_at DESC)")
+            columns = {row[1] for row in conn.execute("PRAGMA table_info(queries)")}
+            if "verified" not in columns:
+                conn.execute("ALTER TABLE queries ADD COLUMN verified INTEGER NOT NULL DEFAULT 0")
 
     def save(self, db_key: str, query: SavedQuery) -> int:
         rows = query.query_results
@@ -97,6 +100,7 @@ class HistoryStore:
             error_message=row["error_message"],
             query_results=loads(row["query_results"], None),
             result_message=row["result_message"],
+            verified=bool(row["verified"]),
         )
 
     def list(self, db_key: str, limit: int = 50, offset: int = 0) -> List[SavedQuery]:
@@ -116,19 +120,35 @@ class HistoryStore:
         with self._lock, self._connect() as conn:
             return conn.execute("DELETE FROM queries WHERE db_key = ? AND id = ?", (db_key, query_id)).rowcount > 0
 
-    def examples(self, db_key: str, tables: List[str], limit: int = 3) -> List[SavedQuery]:
-        """Aynı tablolarda daha önce başarıyla çalışmış sorular: few-shot örnek olarak kullanılır."""
-        wanted = sorted(t.lower() for t in tables)
-        found: List[SavedQuery] = []
+    def set_verified(self, db_key: str, query_id: int, verified: bool) -> bool:
+        with self._lock, self._connect() as conn:
+            return conn.execute("UPDATE queries SET verified = ? WHERE db_key = ? AND id = ?",
+                                (int(verified), db_key, query_id)).rowcount > 0
+
+    def update_sql(self, db_key: str, query_id: int, sql: str, tables: List[str], success: bool,
+                   error: Optional[str], results: Optional[List[Dict[str, Any]]]) -> bool:
+        """Kullanıcı SQL'i düzeltip çalıştırınca kaydı günceller; düzeltilmiş ve çalışan sorgu doğrulanmış sayılır."""
+        payload = json.dumps(results[: Config.HISTORY_MAX_ROWS], ensure_ascii=False, default=_json_default) if results is not None else None
+        with self._lock, self._connect() as conn:
+            return conn.execute(
+                """UPDATE queries SET sql_query = ?, tables_used = ?, is_successful = ?, error_message = ?,
+                       query_results = ?, verified = ? WHERE db_key = ? AND id = ?""",
+                (sql, json.dumps(tables, ensure_ascii=False), int(success), error, payload, int(success), db_key, query_id),
+            ).rowcount > 0
+
+    def examples(self, db_key: str, question: str, limit: int = 3) -> List[SavedQuery]:
+        """Few-shot örnekler: önce doğrulanmışlar, soruyla kelime örtüşmesi en yüksek olanlar. Tablo seçimi gerekmez."""
+        from backend.services.knowledge import stems
+        wanted = stems(question)
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT * FROM queries WHERE db_key = ? AND is_successful = 1 ORDER BY id DESC LIMIT 50",
-                (db_key,),
+                "SELECT * FROM queries WHERE db_key = ? AND is_successful = 1 ORDER BY id DESC LIMIT 200", (db_key,),
             ).fetchall()
+        scored = []
         for row in rows:
             query = self._row_to_query(row)
-            if sorted(t.lower() for t in query.tables_used) == wanted:
-                found.append(query)
-                if len(found) >= limit:
-                    break
-        return found
+            overlap = len(wanted & stems(query.question))
+            if overlap or query.verified:
+                scored.append((query.verified * 2 + overlap, query.id, query))
+        scored.sort(key=lambda item: (-item[0], -item[1]))
+        return [q for score, _, q in scored if score >= 2][:limit]
