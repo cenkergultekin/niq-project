@@ -23,6 +23,7 @@ a = Analysis(
         'waitress',
         'sqlglot',
         'paramiko',
+        'openpyxl',
         'openai',
     ],
     hookspath=[],
