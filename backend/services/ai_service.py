@@ -18,11 +18,11 @@ class AIService:
         """Initialize AI service with OpenAI client."""
         try:
             # Check if API key exists
-            if not Config.OPENAI_API_KEY:
-                raise ValueError("OPENAI_API_KEY not found in environment variables")
+            if not Config.get_provider():
+                raise ValueError("OPENAI_API_KEY or OPENROUTER_API_KEY not found in environment variables")
             
             self.client = OpenAI(**Config.get_openai_config())
-            self.model = Config.OPENAI_MODEL
+            self.model = Config.get_model()
             self.ai_available = True
             logger.info(f"AI service initialized successfully with model: {self.model}")
         except Exception as e:

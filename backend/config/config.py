@@ -36,6 +36,18 @@ class Config:
     # OpenAI Configuration
     OPENAI_API_KEY: Optional[str] = os.getenv('OPENAI_API_KEY')
     OPENAI_MODEL: str = os.getenv('OPENAI_MODEL', 'gpt-4o-mini')
+
+    # OpenRouter Configuration (OpenAI-uyumlu; OPENAI_API_KEY yoksa kullanılır)
+    OPENROUTER_API_KEY: Optional[str] = os.getenv('OPENROUTER_API_KEY')
+    OPENROUTER_MODEL: str = os.getenv('OPENROUTER_MODEL', 'openai/gpt-6-luna')
+    # OPENROUTER_MODEL için seçenekler (fiyat: $0.10 giriş / $0.50 çıkış, 1M token)
+    OPENROUTER_MODEL_OPTIONS: tuple = (
+        'openai/gpt-6-luna',
+        'openai/gpt-6-luna-pro',
+        'anthropic/claude-haiku-5.5',
+        'openai/gpt-4o-mini',
+    )
+    OPENROUTER_BASE_URL: str = os.getenv('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1')
     
     # Database Configuration
     DB_CONNECTION_TIMEOUT: int = int(os.getenv('DB_CONNECTION_TIMEOUT', '5'))
@@ -47,14 +59,28 @@ class Config:
     MAX_QUERY_LENGTH: int = int(os.getenv('MAX_QUERY_LENGTH', '1000'))
     
     @classmethod
+    def get_provider(cls) -> Optional[str]:
+        """Aktif AI sağlayıcısı: OPENAI_API_KEY varsa openai, yoksa openrouter."""
+        if cls.OPENAI_API_KEY:
+            return 'openai'
+        if cls.OPENROUTER_API_KEY:
+            return 'openrouter'
+        return None
+
+    @classmethod
     def validate_config(cls) -> None:
         """Validate required configuration values."""
-        if not cls.OPENAI_API_KEY:
-            raise ValueError("OPENAI_API_KEY environment variable is required")
-    
+        if not cls.get_provider():
+            raise ValueError("OPENAI_API_KEY or OPENROUTER_API_KEY environment variable is required")
+
+    @classmethod
+    def get_model(cls) -> str:
+        """Aktif sağlayıcının model adı."""
+        return cls.OPENROUTER_MODEL if cls.get_provider() == 'openrouter' else cls.OPENAI_MODEL
+
     @classmethod
     def get_openai_config(cls) -> dict:
-        """Get OpenAI configuration as dictionary."""
-        return {
-            'api_key': cls.OPENAI_API_KEY
-        }
+        """OpenAI SDK client ayarları (OpenRouter için base_url eklenir)."""
+        if cls.get_provider() == 'openrouter':
+            return {'api_key': cls.OPENROUTER_API_KEY, 'base_url': cls.OPENROUTER_BASE_URL}
+        return {'api_key': cls.OPENAI_API_KEY}
