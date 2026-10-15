@@ -131,33 +131,39 @@ def pump(channel, target):
         pass
 
 
+def handle_connection(client, host_key, iface):
+    """Her bağlantı kendi iş parçacığında: istemci el sıkışmanın ortasında koparırsa (host anahtarı reddi gibi)
+    kabul döngüsü ölmesin."""
+    try:
+        transport = paramiko.Transport(client)
+        transport.add_server_key(host_key)
+        transport.start_server(server=iface)
+        while True:
+            channel = transport.accept(timeout=30)
+            if channel is None:
+                return
+            host, port = iface.destinations[channel.get_id()]
+            target = socket.create_connection((host, port))
+            threading.Thread(target=pump, args=(channel, target), daemon=True).start()
+
+            def back(ch=channel, tg=target):
+                try:
+                    while data := tg.recv(4096):
+                        ch.sendall(data)
+                except OSError:
+                    pass
+            threading.Thread(target=back, daemon=True).start()
+    except (paramiko.SSHException, OSError, EOFError):
+        return
+
+
 def serve_ssh(listener, host_key, iface):
     while True:
         try:
             client, _ = listener.accept()
         except OSError:
             return
-        transport = paramiko.Transport(client)
-        transport.add_server_key(host_key)
-        transport.start_server(server=iface)
-
-        def accept_channels(t=transport):
-            while True:
-                channel = t.accept(timeout=30)
-                if channel is None:
-                    return
-                host, port = iface.destinations[channel.get_id()]
-                target = socket.create_connection((host, port))
-                threading.Thread(target=pump, args=(channel, target), daemon=True).start()
-
-                def back(ch=channel, tg=target):
-                    try:
-                        while data := tg.recv(4096):
-                            ch.sendall(data)
-                    except OSError:
-                        pass
-                threading.Thread(target=back, daemon=True).start()
-        threading.Thread(target=accept_channels, daemon=True).start()
+        threading.Thread(target=handle_connection, args=(client, host_key, iface), daemon=True).start()
 
 
 @pytest.fixture(scope="module")
