@@ -173,6 +173,7 @@ def run_question(
 
     previous_sql = previous_error = None
     sql = explanation = ""
+    follow_ups: List[str] = []
     response = None
     used: List[str] = list(provided)
     attempts = 0
@@ -181,6 +182,7 @@ def run_question(
         answer = ai.generate_sql(question, schema, examples, previous_sql, previous_error, dialect=dialect,
                                  context=context, turns=turns)
         sql, explanation = answer["sql"], answer["explanation"]
+        follow_ups = answer.get("follow_ups", [])
 
         guard = validate_sql(sql, allowed_tables=sorted(known), dialect_id=dialect.id, database=connector.profile.database)
         if not guard.ok:
@@ -225,7 +227,7 @@ def run_question(
 
     payload: Dict[str, Any] = {
         "success": success, "sql": sql, "explanation": explanation, "attempts": attempts, "query_id": query_id,
-        "tables_used": used, "auto_tables": auto,
+        "tables_used": used, "auto_tables": auto, "follow_ups": follow_ups if success else [],
     }
     if success:
         payload.update(results=response.results, row_count=len(response.results),

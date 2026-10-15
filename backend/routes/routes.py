@@ -39,6 +39,7 @@ from backend.services.knowledge import KnowledgeStore
 from backend.services.profiler import profile_database
 from backend.services.query_service import ConversationStore, run_question, suggest_tables
 from backend.services.schedule import parse_schedule, validate_schedule
+from backend.services.suggestions import build_suggestions
 
 logger = logging.getLogger(__name__)
 
@@ -326,6 +327,13 @@ def get_columns():
         raise ValidationError(f"En fazla {Config.MAX_TABLES_PER_QUERY} tablo seçilebilir")
     tables = [StringUtils.sanitize_input(t) for t in tables]
     return jsonify(ok(state.manager().get_multiple_table_columns(tables)))
+
+
+@api_bp.route("/suggestions", methods=["GET"])
+def get_suggestions():
+    """Bağlanınca gösterilen hazır sorular (AI varsa şemadan üretilir, yoksa şema tabanlı genel sorular; önbelleklenir)."""
+    return jsonify(ok(build_suggestions(state.manager(), state.ai_service, state.knowledge,
+                                        refresh=request.args.get("refresh") == "1")))
 
 
 @api_bp.route("/suggest_tables", methods=["POST"])
