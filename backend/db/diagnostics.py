@@ -15,6 +15,7 @@ from sqlalchemy import text
 from backend.db.connector import Connector, friendly_error
 from backend.db.dialects import DIALECTS, driver_available
 from backend.db.profiles import Profile
+from backend.db.tunnel import HostKeyChanged, HostKeyUnknown, SSHTunnelError
 
 OK, FAIL, WARN, SKIP = "ok", "fail", "warn", "skip"
 
@@ -114,35 +115,63 @@ def _check_privileges(connector: Connector) -> Dict[str, str]:
     return _step("privileges", "Yetki", OK, "Salt-okunur hesap")
 
 
-def diagnose(profile: Profile, password: Optional[str]) -> Dict[str, Any]:
-    """Bağlantıyı adım adım sınar. Başarısız adımdan sonrası atlanır."""
+def diagnose(profile: Profile, password: Optional[str], ssh_secret: Optional[str] = None,
+             trust_ssh_host: bool = False) -> Dict[str, Any]:
+    """Bağlantıyı adım adım sınar. Başarısız adımdan sonrası atlanır.
+    Bilinmeyen SSH sunucu anahtarı HostKeyUnknown olarak fırlatılır (kritik adım: kullanıcı onayı)."""
     steps: List[Dict[str, str]] = [_check_driver(profile)]
-    if steps[-1]["status"] != FAIL:
-        steps.append(_check_network(profile))
-    connector: Optional[Connector] = None
-    if steps[-1]["status"] != FAIL:
-        connector = Connector(profile, password=password or "")
-        try:
-            with connector.engine.connect() as conn:
-                conn.execute(text("SELECT 1")).fetchone()
-            detail = "Dosya açıldı" if connector.dialect.file_based else f"{profile.user or 'kullanıcı'} olarak bağlanıldı"
-            steps.append(_step("login", "Giriş", OK, detail))
-        except Exception as exc:
-            message = friendly_error(exc)
-            steps.append(_step("login", "Giriş", FAIL, message, explain_error(message)))
-            connector = None
-    if connector is not None:
-        try:
-            tables = connector.get_tables(refresh=True)
-            if tables:
-                steps.append(_step("read", "Tablo erişimi", OK, f"{len(tables)} tablo görüldü"))
+    connector = Connector(profile, password=password or "", ssh_secret=ssh_secret, trust_ssh_host=trust_ssh_host)
+    try:
+        if steps[-1]["status"] != FAIL and profile.uses_ssh:
+            try:
+                local_port = connector.open_tunnel()
+                steps.append(_step("ssh", "SSH tüneli", OK, f"{profile.options['ssh_host']} üzerinden 127.0.0.1:{local_port}"))
+            except HostKeyUnknown:
+                raise
+            except SSHTunnelError as exc:
+                hint = ("Anahtar dosyasını, kullanıcı adını ve parolayı kontrol edin; sunucuda SSH'a izin verildiğinden emin olun."
+                        if not isinstance(exc, HostKeyChanged) else "Parmak izi değişti: yöneticiyle doğrulamadan devam etmeyin.")
+                steps.append(_step("ssh", "SSH tüneli", FAIL, str(exc), hint))
+        if steps[-1]["status"] != FAIL:
+            if profile.uses_ssh:
+                steps.append(_step("network", "Ağ", SKIP, "SSH tüneli üzerinden erişilir"))
             else:
-                steps.append(_step("read", "Tablo erişimi", WARN, "Hiç tablo görünmüyor",
-                                   "Kullanıcıya bu veritabanında SELECT/metadata yetkisi verin veya doğru veritabanını seçin."))
-        except Exception as exc:
-            message = friendly_error(exc)
-            steps.append(_step("read", "Tablo erişimi", FAIL, message, explain_error(message)))
-        steps.append(_check_privileges(connector))
+                steps.append(_check_network(profile))
+        login_ok = False
+        if steps[-1]["status"] != FAIL:
+            try:
+                with connector.engine.connect() as conn:
+                    conn.execute(text("SELECT 1")).fetchone()
+                if connector.dialect.file_based:
+                    detail = "Dosya açıldı"
+                elif profile.uses_windows_auth:
+                    detail = "Windows hesabıyla bağlanıldı"
+                else:
+                    detail = f"{profile.user or 'kullanıcı'} olarak bağlanıldı"
+                steps.append(_step("login", "Giriş", OK, detail))
+                login_ok = True
+            except HostKeyUnknown:
+                raise
+            except Exception as exc:
+                message = friendly_error(exc)
+                hint = explain_error(message)
+                if profile.uses_windows_auth and re.search(r"login failed|SSPI|trusted", message, re.IGNORECASE):
+                    hint = ("Windows girişi için uygulamanın çalıştığı Windows hesabının SQL Server'da yetkili olması gerekir "
+                            "ve bilgisayar etki alanına (domain) bağlı olmalıdır. Aksi halde SQL hesabı kullanın.")
+                steps.append(_step("login", "Giriş", FAIL, message, hint))
+        if login_ok:
+            try:
+                tables = connector.get_tables(refresh=True)
+                if tables:
+                    steps.append(_step("read", "Tablo erişimi", OK, f"{len(tables)} tablo görüldü"))
+                else:
+                    steps.append(_step("read", "Tablo erişimi", WARN, "Hiç tablo görünmüyor",
+                                       "Kullanıcıya bu veritabanında SELECT/metadata yetkisi verin veya doğru veritabanını seçin."))
+            except Exception as exc:
+                message = friendly_error(exc)
+                steps.append(_step("read", "Tablo erişimi", FAIL, message, explain_error(message)))
+            steps.append(_check_privileges(connector))
+    finally:
         connector.close()
     ok = all(s["status"] in (OK, SKIP, WARN) for s in steps) and any(s["id"] == "login" and s["status"] == OK for s in steps)
     return {"ok": ok, "steps": steps}

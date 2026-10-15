@@ -121,13 +121,32 @@ def build_url(dialect_id: str, host: str = "", port: Optional[int] = None, datab
         from backend.core.utils import ODBCUtils
         driver = ODBCUtils.pick_driver(options.pop("driver", None))
         server = host if "\\" in host or not port else f"{host},{port}"
-        odbc = f"DRIVER={{{driver}}};SERVER={server};DATABASE={database};UID={user};PWD={{{password.replace('}', '}}')}}}"
-        if "18" in driver and options.pop("trust_server_cert", "yes") != "no":
-            odbc += ";TrustServerCertificate=yes"
-        odbc += "".join(f";{k}={v}" for k, v in options.items())
-        return "mssql+pyodbc:///?odbc_connect=" + quote_plus(odbc)
+        parts = [f"DRIVER={{{driver}}}", f"SERVER={server}", f"DATABASE={database}"]
+        if options.pop("auth", "sql") == "windows":
+            parts.append("Trusted_Connection=yes")
+        else:
+            parts += [f"UID={user}", "PWD={" + password.replace("}", "}}") + "}"]
+        ssl = options.pop("ssl", "")
+        trust_default = options.pop("trust_server_cert", "yes") != "no"
+        if ssl == "disable":
+            parts.append("Encrypt=no")
+        elif ssl == "require":
+            parts += ["Encrypt=yes", "TrustServerCertificate=yes"]
+        elif ssl == "verify":
+            parts += ["Encrypt=yes", "TrustServerCertificate=no"]
+        elif "18" in driver and trust_default:
+            parts.append("TrustServerCertificate=yes")
+        options.pop("ssl_ca", None)
+        parts += [f"{k}={v}" for k, v in options.items() if not k.startswith("ssh_")]
+        return "mssql+pyodbc:///?odbc_connect=" + quote_plus(";".join(parts))
     if dialect_id == "postgresql":
-        return f"postgresql+psycopg://{auth}{host}:{port}/{database}"
+        params = {"disable": "disable", "require": "require", "verify": "verify-full"}
+        query = ""
+        if options.get("ssl") in params:
+            query = "?sslmode=" + params[options["ssl"]]
+            if options.get("ssl") == "verify" and options.get("ssl_ca"):
+                query += "&sslrootcert=" + quote_plus(options["ssl_ca"])
+        return f"postgresql+psycopg://{auth}{host}:{port}/{database}{query}"
     if dialect_id == "mysql":
         return f"mysql+pymysql://{auth}{host}:{port}/{database}?charset=utf8mb4"
     raise ValueError(f"Desteklenmeyen veritabanı türü: {dialect_id}")

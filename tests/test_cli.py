@@ -84,7 +84,7 @@ def test_usage_errors(capsys):
 def test_password_comes_from_env_not_argv(capsys, monkeypatch):
     captured = {}
 
-    def fake_diagnose(profile, password):
+    def fake_diagnose(profile, password, **kwargs):
         captured["password"] = password
         return {"ok": True, "steps": []}
 

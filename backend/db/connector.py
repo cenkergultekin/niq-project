@@ -5,17 +5,19 @@ Tür-bağımsız veritabanı bağlayıcısı (SQLAlchemy).
 - Sorgular salt-okunur oturumda çalışır, satır limitlenir, her zaman rollback edilir.
 """
 import logging
+import re
 import threading
 import time
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.pool import NullPool
 
 from backend.config.config import Config
 from backend.db.dialects import DIALECTS, build_url
-from backend.db.profiles import Profile, get_password
+from backend.db.profiles import Profile, get_password, get_ssh_secret
+from backend.db.tunnel import HostKeyChanged, HostKeyUnknown, SSHTunnel, SSHTunnelError
 from backend.models.models import ColumnInfo, DatabaseSchema, QueryResponse, TableInfo
 
 logger = logging.getLogger(__name__)
@@ -31,19 +33,35 @@ def display_name(schema: Optional[str], table: str, default_schema: Optional[str
 def friendly_error(exc: Exception) -> str:
     """Sürücü hata zincirinden okunabilir tek satır çıkarır."""
     text_ = str(getattr(exc, "orig", None) or exc)
+    if re.search(r"HYT00|timeout expired|interrupted|statement timeout|max_execution_time|query execution was interrupted",
+                 text_, re.IGNORECASE) and not re.search(r"login|connect", text_, re.IGNORECASE):
+        return f"Sorgu {Config.QUERY_TIMEOUT} saniye sınırını aştı. Daha dar bir soru sorun (tarih aralığı, daha az tablo)."
     if "]" in text_ and "[" in text_:
         text_ = text_.rsplit("]", 1)[-1]
     text_ = text_.strip(" )'\"\n")
     return " ".join(text_.split())[:300] or "Veritabanı hatası"
 
 
+def apply_query_timeout(db_type: str, dbapi_connection, seconds: int) -> None:
+    """Sürücü düzeyinde sorgu zaman aşımı. PostgreSQL/MySQL için SQL ile (`_prepare`), burada diğerleri."""
+    if db_type == "mssql":
+        dbapi_connection.timeout = seconds  # pyodbc: sorgu zaman aşımı (sn)
+    elif db_type == "sqlite":
+        deadline = time.monotonic() + seconds
+        dbapi_connection.set_progress_handler(lambda: 1 if time.monotonic() > deadline else 0, 10000)
+
+
 class Connector:
     """Bir bağlantı profilinin canlı yöneticisi."""
 
-    def __init__(self, profile: Profile, password: Optional[str] = None):
+    def __init__(self, profile: Profile, password: Optional[str] = None,
+                 ssh_secret: Optional[str] = None, trust_ssh_host: bool = False):
         self.profile = profile
         self.dialect = DIALECTS[profile.type]
         self._password = password
+        self._ssh_secret = ssh_secret
+        self._trust_ssh_host = trust_ssh_host
+        self._tunnel: Optional[SSHTunnel] = None
         self._engine: Optional[Engine] = None
         self._table_cache: Optional[List[str]] = None
         self._table_cache_at = 0.0
@@ -55,32 +73,71 @@ class Connector:
     def db_key(self) -> str:
         return self.profile.key
 
+    def open_tunnel(self) -> Optional[int]:
+        """Profilde SSH varsa tüneli açar ve yerel portu döndürür. HostKeyUnknown onay için yukarı iletilir."""
+        if not self.profile.uses_ssh:
+            return None
+        if self._tunnel is not None and self._tunnel.local_port:
+            return self._tunnel.local_port
+        profile = self.profile
+        if "\\" in profile.host:
+            raise SSHTunnelError("Adlandırılmış SQL Server örneği tünellenemez; sunucu adresini host ve port olarak girin.")
+        secret = self._ssh_secret if self._ssh_secret is not None else get_ssh_secret(profile)
+        options = profile.options
+        self._tunnel = SSHTunnel(
+            options["ssh_host"], int(options.get("ssh_port") or 22), options.get("ssh_user", ""),
+            profile.host or "localhost", int(profile.port or self.dialect.default_port or 0),
+            key_path=options.get("ssh_key"), secret=secret, trust_new_host=self._trust_ssh_host,
+        )
+        return self._tunnel.start()
+
     def _url(self) -> str:
-        password = self._password if self._password is not None else (get_password(self.profile) or "")
         options = dict(self.profile.options)
+        host, port = self.profile.host, self.profile.port
+        local_port = self.open_tunnel()
+        if local_port:
+            host, port = "127.0.0.1", local_port
+        if self.profile.uses_windows_auth:
+            password = ""
+        else:
+            password = self._password if self._password is not None else (get_password(self.profile) or "")
         if self.profile.type == "mssql":
             from backend.config.config import Settings
             options.setdefault("trust_server_cert", "yes" if Settings.load().get("trust_server_cert", True) else "no")
-        return build_url(self.profile.type, self.profile.host, self.profile.port, self.profile.database,
+        return build_url(self.profile.type, host, port, self.profile.database,
                          self.profile.user, password, options)
 
     @property
     def engine(self) -> Engine:
         if self._engine is None:
             connect_args: Dict[str, Any] = {}
-            if self.profile.type == "postgresql":
-                connect_args["connect_timeout"] = Config.DB_CONNECTION_TIMEOUT
-            elif self.profile.type == "mysql":
+            if self.profile.type in ("postgresql", "mysql"):
                 connect_args["connect_timeout"] = Config.DB_CONNECTION_TIMEOUT
             elif self.profile.type == "mssql":
                 connect_args["timeout"] = Config.DB_CONNECTION_TIMEOUT
-            self._engine = create_engine(self._url(), poolclass=NullPool, connect_args=connect_args)
+            if self.profile.type == "mysql":
+                ssl_mode = self.profile.options.get("ssl")
+                if ssl_mode == "require":
+                    connect_args["ssl"] = {"check_hostname": False}
+                elif ssl_mode == "verify":
+                    connect_args["ssl"] = {"ca": self.profile.options.get("ssl_ca")}
+            engine = create_engine(self._url(), poolclass=NullPool, connect_args=connect_args)
+            db_type = self.profile.type
+
+            @event.listens_for(engine, "connect")
+            def _on_connect(dbapi_connection, _record):
+                apply_query_timeout(db_type, dbapi_connection, Config.QUERY_TIMEOUT)
+
+            self._engine = engine
         return self._engine
 
     def close(self) -> None:
         if self._engine is not None:
             self._engine.dispose()
             self._engine = None
+        if self._tunnel is not None:
+            self._tunnel.close()
+            self._tunnel = None
 
     def _prepare(self, conn) -> None:
         """Oturumu salt-okunur ve zaman sınırlı yapar (veritabanı tarafı ikinci savunma)."""
@@ -94,6 +151,8 @@ class Connector:
             with self.engine.connect() as conn:
                 conn.execute(text("SELECT 1")).fetchone()
             return True
+        except (HostKeyUnknown, HostKeyChanged):
+            raise
         except Exception as exc:
             logger.error("Bağlantı testi başarısız: %s", friendly_error(exc))
             return False

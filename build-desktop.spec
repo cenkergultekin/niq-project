@@ -22,6 +22,7 @@ a = Analysis(
         'win32ctypes',
         'waitress',
         'sqlglot',
+        'paramiko',
         'openai',
     ],
     hookspath=[],

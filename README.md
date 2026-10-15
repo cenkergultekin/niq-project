@@ -20,6 +20,11 @@ Arayüzde bağlantı dört adımdır: **Tür** (yerelde bulunan sunucular ayrıc
 - **Test** adım adım ilerler (sürücü, ağ, giriş, tablo erişimi, yetki); başarısız adım ne yapılacağını söyler.
 - Profiller parolayla birlikte yalnızca siz onaylarsanız kaydedilir; parola Windows Credential Manager'da durur.
 - Soru yazarken ilgili tablolar tahmin edilip seçilir.
+- **SQL Server Windows girişi** (Trusted Connection): kimlik doğrulamada "Windows girişi"ni seçin, kullanıcı/parola gerekmez.
+- **Şifreli bağlantı**: Gelişmiş > SSL/TLS (otomatik, şifreli, sertifikayı doğrula, kapalı).
+- **SSH tüneli**: Gelişmiş > SSH tüneli. Veritabanına yalnızca atlama sunucusundan erişiliyorsa doldurun. SSH sunucusunun parmak izi ilk bağlantıda onayınıza sunulur, sonradan değişirse bağlantı reddedilir.
+- **Zaman aşımı**: sorgular 30 saniyede sürücü düzeyinde kesilir.
+- **Çevrimdışı**: grafik kütüphanesi ve fontlar uygulamayla gelir, internet gerekmez (AI sağlayıcısı hariç; yerel model kullanırsanız o da gerekmez).
 
 Kritik adımlar (profil kaydetme/silme, API anahtarı silme, sonuç satırlarını AI'a göndermeyi açma) onay ister; okuma, keşif, test ve sorgu onaysızdır.
 

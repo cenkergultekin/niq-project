@@ -8,6 +8,7 @@ Bu dosya, NIQ'yu kullanan veya geliştiren bir agent içindir. NIQ doğal dil so
 - Kalıcı bir şey yazan **kritik adımlar** kullanıcıdan onay almadan çalıştırılmaz:
   - `connections save` (profil ve parolayı bu bilgisayara kaydeder)
   - `connections delete`
+  - yeni bir SSH sunucusunun anahtarına güvenmek (`trust_ssh_host`): çıkış kodu 3 ve parmak izi döner, kullanıcıya göster
   - AI sağlayıcısına sonuç satırı göndermeyi açmak, kayıtlı API anahtarını silmek (API'de `approved: true`)
   Bu komutlar `--yes` olmadan çıkış kodu **3** ve `needs_approval: true` döner. Kullanıcıya `summary` alanını göster, onay alırsan aynı komutu `--yes` ile tekrar çalıştır.
 - Parolayı komut satırı argümanına **yazma**. `--password-env DEGISKEN` (varsayılan `NIQ_DB_PASSWORD`) veya `--password-stdin` kullan. Parolayı sohbete, loga veya dosyaya yazma.
@@ -28,6 +29,13 @@ Bu dosya, NIQ'yu kullanan veya geliştiren bir agent içindir. NIQ doğal dil so
    - `python niq_cli.py schema --connection uretim --tables orders,customers`
    - `python niq_cli.py ask --connection uretim "geçen ayın toplam satışı"` (`--tables` verilmezse sorudan tahmin edilir; AI anahtarı gerekir, `python niq_cli.py ai status` ile bak)
    - `python niq_cli.py sql --connection uretim "SELECT ..."` kendi SELECT'ini aynı güvenlik katmanıyla çalıştırır.
+
+## Bağlantı seçenekleri
+
+- SQL Server Windows girişi: `--auth windows` (kullanıcı/parola gerekmez; uygulamanın çalıştığı Windows hesabı kullanılır).
+- Şifreli bağlantı: `--ssl disable|require|verify` (`verify` için PostgreSQL/MySQL'de `--ssl-ca dosya.pem`).
+- SSH tüneli (veritabanı yalnızca atlama sunucusundan erişilebilirse): `--ssh-host H --ssh-user U [--ssh-port 22] [--ssh-key anahtar] [--ssh-password-env NIQ_SSH_PASSWORD]`. Sunucu anahtarı ilk kez görülünce komut çıkış kodu 3 ile durur; parmak izini kullanıcıya gösterip onay alırsan `--yes` ile tekrar çalıştır. Kaydedilen parmak izi sonradan değişirse bağlantı reddedilir, bu onaylanamaz: kullanıcıyı uyar.
+- Sorgu zaman aşımı sabittir (30 sn); aşılırsa hata mesajı daha dar bir soru önerir.
 
 ## Desteklenen veritabanları
 

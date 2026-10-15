@@ -29,7 +29,15 @@ from backend.core.utils import ValidationError, setup_logging
 from backend.db import diagnostics
 from backend.db.connector import Connector, friendly_error
 from backend.db.dialects import DIALECTS
-from backend.db.profiles import Profile, ProfileStore, get_password, parse_connection_input, set_password
+from backend.db.profiles import (
+    Profile,
+    ProfileStore,
+    get_password,
+    parse_connection_input,
+    set_password,
+    set_ssh_secret,
+)
+from backend.db.tunnel import HostKeyUnknown
 from backend.services.ai_service import AIService, AIServiceError, AIUnavailableError
 from backend.services.history import HistoryStore
 from backend.services.query_service import run_question, run_sql, suggest_tables
@@ -62,17 +70,27 @@ def add_profile_args(parser: argparse.ArgumentParser) -> None:
     group.add_argument("--name", help="profil adı (kaydederken)")
     group.add_argument("--password-env", default="NIQ_DB_PASSWORD", help="parolanın okunacağı ortam değişkeni")
     group.add_argument("--password-stdin", action="store_true", help="parolayı stdin'den oku")
+    group.add_argument("--auth", choices=["sql", "windows"], help="SQL Server: windows = Windows girişi (parola gerekmez)")
+    group.add_argument("--ssl", choices=["disable", "require", "verify"], help="şifreli bağlantı modu")
+    group.add_argument("--ssl-ca", help="sertifika yetkilisi dosyası (verify için)")
+    group.add_argument("--ssh-host", help="SSH tüneli: atlama sunucusu")
+    group.add_argument("--ssh-port", type=int)
+    group.add_argument("--ssh-user")
+    group.add_argument("--ssh-key", help="SSH özel anahtar dosyası")
+    group.add_argument("--ssh-password-env", default="NIQ_SSH_PASSWORD", help="SSH parolası/anahtar parolası ortam değişkeni")
+    group.add_argument("--yes", action="store_true", help="kritik adımı onayla (profil kaydet/sil, yeni SSH sunucu anahtarına güven)")
 
 
-def resolve_profile(args: argparse.Namespace, store: ProfileStore) -> Tuple[Profile, Optional[str]]:
-    """Argümanlardan profil ve parola üretir. Kayıtlı profilde parola None (keyring'den okunur)."""
+def resolve_profile(args: argparse.Namespace, store: ProfileStore) -> Tuple[Profile, Optional[str], Optional[str]]:
+    """Argümanlardan (profil, parola, ssh_sırrı) üretir. Kayıtlı profilde ikisi de None (keyring'den okunur)."""
     if args.connection:
         profile = store.get(args.connection)
         if not profile:
             raise CliError(f"Profil bulunamadı: {args.connection}. 'connections list' ile bakın.")
-        return profile, None
+        return profile, None, None
 
     fields: Dict[str, Any] = {}
+    options: Dict[str, Any] = {}
     password = ""
     if args.input:
         parsed = parse_connection_input(args.input)
@@ -80,11 +98,18 @@ def resolve_profile(args: argparse.Namespace, store: ProfileStore) -> Tuple[Prof
             raise CliError("--input tanınmadı. URL, ODBC dizesi veya dosya yolu verin.", EXIT_USAGE)
         password = parsed.pop("password", "")
         parsed.pop("recognized", None)
+        options.update(parsed.pop("options", None) or {})
         fields.update({k: v for k, v in parsed.items() if v not in (None, "")})
     for key in ("type", "host", "port", "database", "user", "name"):
         value = getattr(args, key, None)
         if value not in (None, ""):
             fields[key] = value
+    for arg_name, option in (("auth", "auth"), ("ssl", "ssl"), ("ssl_ca", "ssl_ca"), ("ssh_host", "ssh_host"),
+                             ("ssh_port", "ssh_port"), ("ssh_user", "ssh_user"), ("ssh_key", "ssh_key")):
+        value = getattr(args, arg_name, None)
+        if value not in (None, ""):
+            options[option] = value
+    fields["options"] = options
     if "type" not in fields:
         raise CliError("Bağlantı belirtilmedi: --connection, --input veya --type kullanın.", EXIT_USAGE)
 
@@ -92,15 +117,17 @@ def resolve_profile(args: argparse.Namespace, store: ProfileStore) -> Tuple[Prof
         password = sys.stdin.readline().rstrip("\r\n")
     elif not password:
         password = os.environ.get(args.password_env, "")
+    ssh_secret = os.environ.get(args.ssh_password_env, "") or None
     try:
-        return Profile.from_dict(fields), password
+        return Profile.from_dict(fields), password, ssh_secret
     except ValueError as exc:
         raise CliError(str(exc), EXIT_USAGE) from exc
 
 
 def open_connector(args: argparse.Namespace, store: ProfileStore) -> Connector:
-    profile, password = resolve_profile(args, store)
-    return Connector(profile, password=password if password is not None else None)
+    profile, password, ssh_secret = resolve_profile(args, store)
+    return Connector(profile, password=password if password is not None else None,
+                     ssh_secret=ssh_secret, trust_ssh_host=bool(args.yes))
 
 
 # --- komutlar -------------------------------------------------------------------------
@@ -119,10 +146,10 @@ def cmd_parse(args, store):
 
 
 def cmd_diagnose(args, store):
-    profile, password = resolve_profile(args, store)
+    profile, password, ssh_secret = resolve_profile(args, store)
     if password is None:
         password = get_password(profile) or ""
-    result = diagnostics.diagnose(profile, password)
+    result = diagnostics.diagnose(profile, password, ssh_secret=ssh_secret, trust_ssh_host=bool(args.yes))
     return {"success": result["ok"], "data": result}
 
 
@@ -140,13 +167,15 @@ def cmd_connections(args, store):
     if args.action == "list":
         return {"success": True, "data": [p.public() for p in store.list()]}
     if args.action == "save":
-        profile, password = resolve_profile(args, store)
+        profile, password, ssh_secret = resolve_profile(args, store)
         require_approval({"approved": args.yes}, "save_connection", f"{profile.name} ({profile.user or 'kullanıcısız'})")
         existing = store.get(profile.name)
         if existing:
             profile.id = existing.id
         if password:
             set_password(profile, password)
+        if ssh_secret:
+            set_ssh_secret(profile, ssh_secret)
         store.save(profile)
         return {"success": True, "data": profile.public(), "message": "Profil kaydedildi."}
     if args.action == "delete":
@@ -247,7 +276,6 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("action", choices=["list", "save", "delete"])
     p.add_argument("target", nargs="?", help="delete için profil adı")
     add_profile_args(p)
-    p.add_argument("--yes", action="store_true", help="kritik adımı (kaydet/sil) onayla")
     p.set_defaults(func=cmd_connections)
 
     p = sub.add_parser("tables", help="tabloları listele")
@@ -291,6 +319,11 @@ def main(argv: Optional[List[str]] = None) -> int:
                     EXIT_APPROVAL)
     except CliError as exc:
         return emit({"success": False, "error": str(exc), **exc.extra}, exc.code)
+    except HostKeyUnknown as exc:
+        return emit({"success": False, "needs_approval": True, "action": "trust_ssh_host", "summary": str(exc),
+                     "rerun_with": "--yes",
+                     "error": "SSH sunucu anahtarı ilk kez görülüyor: parmak izini kullanıcıya gösterin, onay alınırsa --yes ile tekrar çalıştırın."},
+                    EXIT_APPROVAL)
     except ValidationError as exc:
         return emit({"success": False, "error": str(exc)}, EXIT_ERROR)
 

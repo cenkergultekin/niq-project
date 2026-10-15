@@ -31,6 +31,10 @@ SCHEME_TO_TYPE = {
 }
 
 
+# options içinde kabul edilen anahtarlar
+OPTION_KEYS = ("driver", "auth", "ssl", "ssl_ca", "ssh_host", "ssh_port", "ssh_user", "ssh_key")
+
+
 @dataclass
 class Profile:
     type: str
@@ -46,11 +50,34 @@ class Profile:
         if self.type not in DIALECTS:
             raise ValueError(f"Desteklenmeyen veritabanı türü: {self.type}")
         dialect = DIALECTS[self.type]
+        self.options = self._clean_options(self.options)
         self.name = (self.name or self.default_name()).strip()
         if not self.port and dialect.default_port and not dialect.file_based:
             self.port = dialect.default_port
         if not self.host and not dialect.file_based:
             self.host = "localhost"
+
+    def _clean_options(self, options: Dict[str, Any]) -> Dict[str, str]:
+        clean = {k: str(v).strip() for k, v in (options or {}).items() if k in OPTION_KEYS and str(v).strip()}
+        if clean.get("auth") not in (None, "sql", "windows"):
+            raise ValueError("auth 'sql' veya 'windows' olmalı")
+        if clean.get("auth") == "windows" and self.type != "mssql":
+            raise ValueError("Windows kimlik doğrulaması yalnızca SQL Server için geçerli")
+        if clean.get("ssl") not in (None, "disable", "require", "verify"):
+            raise ValueError("ssl 'disable', 'require' veya 'verify' olmalı")
+        if clean.get("ssh_port") and not clean["ssh_port"].isdigit():
+            raise ValueError("SSH portu sayı olmalı")
+        if clean.get("ssh_host") and DIALECTS[self.type].file_based:
+            raise ValueError("SQLite dosyası için SSH tüneli kullanılamaz")
+        return clean
+
+    @property
+    def uses_windows_auth(self) -> bool:
+        return self.options.get("auth") == "windows"
+
+    @property
+    def uses_ssh(self) -> bool:
+        return bool(self.options.get("ssh_host"))
 
     def default_name(self) -> str:
         where = self.database if DIALECTS[self.type].file_based else f"{self.host or 'localhost'}/{self.database}"
@@ -105,6 +132,26 @@ def delete_password(profile: Profile) -> None:
         pass
 
 
+def get_ssh_secret(profile: Profile) -> Optional[str]:
+    """SSH parolası veya anahtar parolası (passphrase)."""
+    try:
+        return keyring.get_password(KEYRING_SERVICE, profile.keyring_account + ":ssh")
+    except Exception as exc:
+        logger.warning("Keyring okunamadı: %s", exc)
+        return None
+
+
+def set_ssh_secret(profile: Profile, secret: str) -> None:
+    keyring.set_password(KEYRING_SERVICE, profile.keyring_account + ":ssh", secret)
+
+
+def delete_ssh_secret(profile: Profile) -> None:
+    try:
+        keyring.delete_password(KEYRING_SERVICE, profile.keyring_account + ":ssh")
+    except keyring.errors.PasswordDeleteError:
+        pass
+
+
 # --- kayıtlı profiller --------------------------------------------------------
 class ProfileStore:
     def __init__(self, path: Optional[Path] = None):
@@ -150,6 +197,7 @@ class ProfileStore:
         with self._lock:
             self._write([i for i in self._read() if i.get("id") != profile.id])
         delete_password(profile)
+        delete_ssh_secret(profile)
         return profile
 
 
@@ -191,9 +239,12 @@ def parse_connection_input(text: str) -> Dict[str, Any]:
         host_part, _, rest = body.partition(";")
         host, port = _split_host_port(host_part)
         kv = _parse_kv(rest)
-        return {"recognized": True, "type": "mssql", "host": host, "port": port,
-                "database": kv.get("databasename") or kv.get("database", ""),
-                "user": kv.get("user", ""), "password": kv.get("password", "")}
+        result = {"recognized": True, "type": "mssql", "host": host, "port": port,
+                  "database": kv.get("databasename") or kv.get("database", ""),
+                  "user": kv.get("user", ""), "password": kv.get("password", "")}
+        if kv.get("integratedsecurity", "").lower() in ("true", "yes", "sspi"):
+            result["options"] = {"auth": "windows"}
+        return result
     if lowered.startswith("jdbc:"):
         text = text[len("jdbc:"):]
         lowered = text.lower()
@@ -225,7 +276,13 @@ def parse_connection_input(text: str) -> Dict[str, Any]:
                 "user": kv.get("uid") or kv.get("user id") or kv.get("user", ""),
                 "password": kv.get("pwd") or kv.get("password", ""),
             }
+            options = {}
             if kv.get("driver"):
-                result["options"] = {"driver": kv["driver"]}
+                options["driver"] = kv["driver"]
+            integrated = (kv.get("integrated security") or kv.get("trusted_connection") or "").lower()
+            if integrated in ("true", "yes", "sspi"):
+                options["auth"] = "windows"
+            if options:
+                result["options"] = options
             return result
     return {"recognized": False}

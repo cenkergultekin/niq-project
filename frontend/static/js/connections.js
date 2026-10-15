@@ -47,6 +47,14 @@
             password: $('db_password').value,
             name: ($('db_profile_name') && $('db_profile_name').value.trim()) || '',
             driver: ($('db_driver') && $('db_driver').value.trim()) || '',
+            auth: state.type === 'mssql' ? $('db_auth').value : '',
+            ssl: $('db_ssl').value,
+            ssl_ca: $('db_ssl_ca').value.trim(),
+            ssh_host: $('db_ssh_host').value.trim(),
+            ssh_port: $('db_ssh_port').value ? Number($('db_ssh_port').value) : '',
+            ssh_user: $('db_ssh_user').value.trim(),
+            ssh_key: $('db_ssh_key').value.trim(),
+            ssh_password: $('db_ssh_password').value,
         };
         if (state.pasted) payload.connection_input = state.pasted;
         if (type.file_based) {
@@ -59,8 +67,11 @@
     function validate(payload) {
         const type = currentType();
         if (!payload.database && !state.pasted) return type.file_based ? 'Dosya yolunu girin' : 'Veritabanı adını girin';
-        if (!type.file_based && !payload.user && !state.pasted) return 'Kullanıcı adını girin';
-        if (!type.file_based && !payload.password && !state.pasted) return 'Parolayı girin';
+        const windows = payload.auth === 'windows';
+        if (!type.file_based && !windows && !payload.user && !state.pasted) return 'Kullanıcı adını girin';
+        if (!type.file_based && !windows && !payload.password && !state.pasted) return 'Parolayı girin';
+        if (payload.ssh_host && !payload.ssh_user) return 'SSH kullanıcısını girin';
+        if (payload.ssl === 'verify' && payload.type !== 'mssql' && !payload.ssl_ca) return 'Sertifikayı doğrulamak için CA dosyasını girin';
         return null;
     }
 
@@ -72,6 +83,11 @@
         document.querySelectorAll('[data-field="host"],[data-field="port"],[data-field="user"],[data-field="password"]')
             .forEach((el) => { el.style.display = fileBased ? 'none' : ''; });
         $('db_driver_group').style.display = typeId === 'mssql' ? '' : 'none';
+        $('db_auth_group').style.display = typeId === 'mssql' ? '' : 'none';
+        if (typeId !== 'mssql') $('db_auth').value = 'sql';
+        applyAuth();
+        $('db_ssl_ca_group').style.display = (!fileBased && $('db_ssl').value === 'verify') ? '' : 'none';
+        $('db_ssl').closest('.input-group').style.display = fileBased ? 'none' : '';
         $('db_database_label').textContent = fileBased ? 'Dosya yolu' : 'Veritabanı';
         $('db_database').placeholder = fileBased ? 'C:\\veri\\sirket.db' : 'Veritabanı adı';
         $('db-list-btn').style.display = fileBased ? 'none' : '';
@@ -87,6 +103,13 @@
         });
         $('db-type-hint').textContent = type.driver_available === false ? ('Sürücü eksik: ' + (type.install_hint || '')) : (type.install_hint || '');
         $('db-permission-hint').textContent = type.permission_hint ? ('Öneri: ' + type.permission_hint) : '';
+    }
+
+    function applyAuth() {
+        const windows = state.type === 'mssql' && $('db_auth').value === 'windows';
+        document.querySelectorAll('[data-field="user"],[data-field="password"]').forEach((el) => {
+            el.style.display = (windows || (currentType().file_based)) ? 'none' : '';
+        });
     }
 
     function renderTypes() {
@@ -110,7 +133,15 @@
         if (values.port) $('db_port').value = values.port;
         if (values.database) $('db_database').value = values.database;
         if (values.user) $('db_username').value = values.user;
-        if (values.options && values.options.driver) $('db_driver').value = values.options.driver;
+        const options = values.options || {};
+        if (options.driver) $('db_driver').value = options.driver;
+        if (options.auth) { $('db_auth').value = options.auth; applyAuth(); }
+        if (options.ssl) $('db_ssl').value = options.ssl;
+        if (options.ssl_ca) $('db_ssl_ca').value = options.ssl_ca;
+        if (options.ssh_host) $('db_ssh_host').value = options.ssh_host;
+        if (options.ssh_port) $('db_ssh_port').value = options.ssh_port;
+        if (options.ssh_user) $('db_ssh_user').value = options.ssh_user;
+        if (options.ssh_key) $('db_ssh_key').value = options.ssh_key;
     }
 
     async function onPaste() {
@@ -300,6 +331,10 @@
             state.types = [{ id: 'mssql', label: 'SQL Server', default_port: 1433, host_suggestions: ['localhost'] }];
         }
         renderTypes();
+        $('db_auth').addEventListener('change', applyAuth);
+        $('db_ssl').addEventListener('change', () => {
+            $('db_ssl_ca_group').style.display = $('db_ssl').value === 'verify' ? '' : 'none';
+        });
         $('db_paste').addEventListener('change', onPaste);
         $('db_paste').addEventListener('paste', () => setTimeout(onPaste, 0));
         $('db-test-btn').addEventListener('click', runTest);

@@ -4,8 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NIQ</title>
-    <link rel="stylesheet" href="/static/css/style.css?v=4.0">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="/static/css/fonts.css">
+    <link rel="stylesheet" href="/static/css/style.css?v=4.1">
+    <script src="/static/vendor/chart.umd.min.js"></script>
 </head>
 <body class="sidebar-collapsed">
     <div class="app-wrapper">
@@ -197,6 +198,13 @@
                             <button type="button" id="db-list-btn" class="ip-help-btn" data-field-only="server">Veritabanlarını getir</button>
                             <select id="db-list-select" class="select-field" style="display:none"></select>
                         </div>
+                        <div class="input-group" data-field="auth" id="db_auth_group" style="display:none">
+                            <label for="db_auth">Kimlik doğrulama</label>
+                            <select id="db_auth" class="select-field">
+                                <option value="sql">SQL Server hesabı (kullanıcı adı ve parola)</option>
+                                <option value="windows">Windows girişi (parola gerekmez)</option>
+                            </select>
+                        </div>
                         <div class="input-group" data-field="user">
                             <label for="db_username">Kullanıcı adı</label>
                             <input type="text" id="db_username" class="input-field" autocomplete="username" placeholder="Kullanıcı adı">
@@ -214,6 +222,43 @@
                             <div class="input-group" id="db_driver_group">
                                 <label for="db_driver">ODBC sürücüsü</label>
                                 <input type="text" id="db_driver" class="input-field" placeholder="Boş bırakın: yüklü en yeni sürücü seçilir">
+                            </div>
+                            <div class="input-group">
+                                <label for="db_ssl">Şifreli bağlantı (SSL/TLS)</label>
+                                <select id="db_ssl" class="select-field">
+                                    <option value="">Otomatik (sürücü varsayılanı)</option>
+                                    <option value="require">Şifreli, sertifikayı doğrulama</option>
+                                    <option value="verify">Şifreli, sertifikayı doğrula</option>
+                                    <option value="disable">Kapalı</option>
+                                </select>
+                            </div>
+                            <div class="input-group" id="db_ssl_ca_group" style="display:none">
+                                <label for="db_ssl_ca">Sertifika yetkilisi dosyası (CA)</label>
+                                <input type="text" id="db_ssl_ca" class="input-field" placeholder="C:\sertifikalar\ca.pem">
+                            </div>
+                            <h3 class="step-title">SSH tüneli (opsiyonel)</h3>
+                            <small class="help-text">Veritabanına yalnızca bir atlama sunucusu (bastion) üzerinden erişiliyorsa doldurun. Sunucu anahtarı ilk bağlantıda onayınıza sunulur.</small>
+                            <div class="form-grid">
+                                <div class="input-group">
+                                    <label for="db_ssh_host">SSH sunucusu</label>
+                                    <input type="text" id="db_ssh_host" class="input-field" placeholder="jump.sirket.com" autocomplete="off">
+                                </div>
+                                <div class="input-group">
+                                    <label for="db_ssh_port">SSH portu</label>
+                                    <input type="number" id="db_ssh_port" class="input-field" placeholder="22" min="1" max="65535">
+                                </div>
+                                <div class="input-group">
+                                    <label for="db_ssh_user">SSH kullanıcısı</label>
+                                    <input type="text" id="db_ssh_user" class="input-field" autocomplete="off">
+                                </div>
+                                <div class="input-group">
+                                    <label for="db_ssh_key">Anahtar dosyası (opsiyonel)</label>
+                                    <input type="text" id="db_ssh_key" class="input-field" placeholder="C:\Users\ben\.ssh\id_ed25519" autocomplete="off">
+                                </div>
+                                <div class="input-group">
+                                    <label for="db_ssh_password">SSH parolası / anahtar parolası</label>
+                                    <input type="password" id="db_ssh_password" class="input-field" autocomplete="off">
+                                </div>
                             </div>
                             <div class="input-group">
                                 <label for="db_profile_name">Profil adı (kaydederken)</label>

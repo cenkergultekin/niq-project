@@ -9,6 +9,7 @@ pyodbc>=5.2.0            # SQL Server
 psycopg[binary]>=3.1     # PostgreSQL
 pymysql>=1.1             # MySQL / MariaDB
 keyring>=25.2.0
+paramiko>=3.4            # SSH tüneli
 pywin32-ctypes>=0.2.2; sys_platform == "win32"
 
 # AI (OpenAI / OpenRouter / yerel OpenAI-uyumlu sunucular)
@@ -21,3 +22,4 @@ sqlglot>=25.0
 
 # Masaüstü arayüz
 PySide6-Essentials>=6.7
+PySide6-Addons>=6.7        # Qt WebEngine (Essentials içinde yok)

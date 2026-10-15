@@ -13,6 +13,7 @@ CRITICAL_ACTIONS = {
     "save_connection": "Bağlantı profilini ve parolasını bu bilgisayara kaydet",
     "delete_connection": "Bağlantı profilini ve kayıtlı parolasını sil",
     "clear_api_key": "Kayıtlı AI API anahtarını sil",
+    "trust_ssh_host": "SSH sunucusunun parmak izine güven ve kaydet",
     "enable_ai_analysis": "Sonuç satırlarının ilk 20 satırını AI sağlayıcısına göndermeyi aç",
 }
 
