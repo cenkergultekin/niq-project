@@ -31,6 +31,7 @@ from backend.db.profiles import (
 from backend.db.tunnel import HostKeyUnknown
 from backend.services import models_catalog
 from backend.services.ai_service import AIService, AIServiceError, AIUnavailableError
+from backend.services.analyst import is_analytical, run_analysis
 from backend.services.history import HistoryStore
 from backend.services.knowledge import KnowledgeStore
 from backend.services.profiler import profile_database
@@ -333,9 +334,26 @@ def execute_query():
     tables = [StringUtils.sanitize_input(t) for t in data.get("tables") or []]
     conversation_id = str(data.get("conversation_id") or "")[:64] or None
     conversation = state.conversations.get(conversation_id)
+    mode = data.get("mode", "auto")
+    analyze = mode == "analyze" or (mode == "auto" and not tables and is_analytical(question))
     try:
-        payload, status = run_question(state.manager(), state.ai_service, state.history, state.knowledge,
-                                       question, tables or None, conversation)
+        if analyze:
+            # Çok adımlı analiz sonuç satırlarını modele gönderir: açık izin gerekir (kritik adım)
+            if not Settings.load()["ai_analysis"]:
+                require_approval(data, "enable_ai_analysis")
+                Settings.save({"ai_analysis": True})
+            try:
+                payload, status = run_analysis(state.manager(), state.ai_service, state.history, state.knowledge,
+                                               question, conversation), 200
+            except AIServiceError as exc:
+                if mode == "analyze":
+                    raise
+                logger.warning("Analiz modu başarısız, tek sorguya dönülüyor: %s", exc)
+                payload, status = run_question(state.manager(), state.ai_service, state.history, state.knowledge,
+                                               question, None, conversation)
+        else:
+            payload, status = run_question(state.manager(), state.ai_service, state.history, state.knowledge,
+                                           question, tables or None, conversation)
     except AIUnavailableError as exc:
         return jsonify(fail(str(exc), "AI_UNAVAILABLE")), 503
     except AIServiceError as exc:
