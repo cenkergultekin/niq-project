@@ -305,6 +305,32 @@ class AIService:
             logger.warning("Sonuç analizi alınamadı: %s", exc)
             return None
 
+    def transcribe(self, audio: bytes, fmt: str = "wav", language: str = "tr") -> str:
+        """Konuşmayı metne çevirir. OpenAI: ses-metin ucu; OpenRouter: ses girdili model (ayarlardaki stt_model)."""
+        if not self.client:
+            raise AIUnavailableError("Sesli sorgu için API anahtarı ayarlanmamış. Ayarlar sayfasından ekleyin.")
+        provider = self.config["provider"]
+        if provider == "local":
+            raise AIServiceError("Sesli sorgu için OpenRouter veya OpenAI sağlayıcısı gerekli (yerel modelde ses desteği yok).")
+        if provider == "openai":
+            try:
+                result = self.client.audio.transcriptions.create(
+                    model="gpt-4o-mini-transcribe", file=(f"ses.{fmt}", audio), language=language)
+            except Exception as exc:
+                raise AIServiceError(f"Ses metne çevrilemedi: {exc}"[:300]) from exc
+            return (result.text or "").strip()
+
+        import base64
+        model = Settings.load().get("stt_model") or "google/gemini-3.5-flash-lite"
+        content = [
+            {"type": "text", "text": "Transcribe this audio verbatim in its original language. "
+                                     "Output only the transcript, no quotes, no commentary."},
+            {"type": "input_audio", "input_audio": {"data": base64.b64encode(audio).decode("ascii"), "format": fmt}},
+        ]
+        params = {"model": model, "messages": [{"role": "user", "content": content}], "max_completion_tokens": 800}
+        response = self._send(params)
+        return (response.choices[0].message.content or "").strip()
+
     def ping(self) -> Dict[str, Any]:
         """Bağlantı testi: küçük bir istek atar, süreyi ve model adını döndürür."""
         started = time.time()

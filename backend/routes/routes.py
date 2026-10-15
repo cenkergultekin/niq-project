@@ -372,6 +372,30 @@ def execute_query():
     return jsonify(payload), status
 
 
+MAX_AUDIO_BYTES = 8 * 1024 * 1024
+
+
+@api_bp.route("/transcribe", methods=["POST"])
+def transcribe_audio():
+    """Bas-konuş kaydını (WAV) metne çevirir. Ses, yalnızca kullanıcı mikrofona bastığında sağlayıcıya gider."""
+    upload = request.files.get("audio")
+    if upload is None:
+        raise ValidationError("Ses dosyası gerekli")
+    audio = upload.read(MAX_AUDIO_BYTES + 1)
+    if not audio:
+        raise ValidationError("Ses boş")
+    if len(audio) > MAX_AUDIO_BYTES:
+        raise ValidationError("Ses kaydı çok uzun (en fazla yaklaşık 60 saniye)")
+    fmt = "wav" if audio[:4] == b"RIFF" else (request.form.get("format") or "wav")
+    try:
+        text = state.ai_service.transcribe(audio, fmt=fmt, language=request.form.get("language", "tr"))
+    except AIUnavailableError as exc:
+        return jsonify(fail(str(exc), "AI_UNAVAILABLE")), 503
+    except AIServiceError as exc:
+        return jsonify(fail(str(exc), "AI_ERROR")), 502
+    return jsonify(ok({"text": text}))
+
+
 @api_bp.route("/conversations/<conversation_id>", methods=["DELETE"])
 def reset_conversation(conversation_id: str):
     """Yeni konuşma: önceki turların bağlamını unutur."""
@@ -674,6 +698,7 @@ def _settings_payload() -> Dict[str, Any]:
         "row_limit": settings["row_limit"],
         "ai_analysis": settings["ai_analysis"],
         "ai_value_samples": settings["ai_value_samples"],
+        "stt_model": settings["stt_model"],
         "trust_server_cert": settings["trust_server_cert"],
     }
 
@@ -713,6 +738,8 @@ def update_settings():
         require_approval(data, "enable_ai_analysis")
     if updates.get("ai_value_samples") and not Settings.load()["ai_value_samples"]:
         require_approval(data, "enable_value_samples")
+    if "stt_model" in data:
+        updates["stt_model"] = str(data["stt_model"]).strip()[:120] or "google/gemini-3.5-flash-lite"
     if "local_base_url" in data:
         url = str(data["local_base_url"]).strip()
         if url and not url.startswith(("http://", "https://")):
