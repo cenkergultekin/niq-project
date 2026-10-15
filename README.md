@@ -4,11 +4,25 @@ Doğal dilde sorduğunuz soruları Microsoft SQL Server için salt-okunur, doğr
 
 ## Nasıl çalışır
 
-1. Bağlanır, tabloları listeler, seçtiğiniz tabloların şemasını (kolon tipleri, birincil ve yabancı anahtarlar) okur.
-2. Soruyu şema ve daha önce başarılı olmuş benzer sorularla birlikte modele gönderir; model JSON olarak `{sql, explanation}` döndürür.
-3. SQL, `sqlglot` ile AST düzeyinde doğrulanır: tek ifade, yalnızca SELECT/CTE/UNION, yasak fonksiyon yok, yalnızca seçilen tablolar.
-4. Sorgu satır limitiyle, her zaman rollback edilen bir işlemde çalışır. Hata olursa hata modele geri verilir ve en fazla 2 kez düzeltilir.
-5. Geçmiş, veritabanınıza hiçbir şey yazılmadan yerelde (`%APPDATA%\NIQ\history.db`) tutulur.
+Tek bir kutu: sorunu yaz (ya da mikrofona bas ve konuş), cevabı tablo olarak al. Tablo seçmen gerekmez.
+
+1. Bağlanır bağlanmaz şemadan ve iş sözlüğünden üretilmiş **hazır sorular** çıkar; birine tıklaman yeter.
+2. Soruyu yazarsın. NIQ ilgili tabloları kendisi bulur (küçük şemada tümü, büyükte ad/not/geçmiş eşleşmesi ya da modelden seçim, yabancı anahtar komşularıyla).
+3. Model, şema + **iş sözlüğü** + doğrulanmış önceki sorularınla JSON olarak `{sql, açıklama, takip soruları}` döndürür.
+4. SQL `sqlglot` ile AST düzeyinde doğrulanır (tek SELECT, yasak fonksiyon yok), salt-okunur oturumda, satır ve süre limitiyle çalışır. Hata olursa hata modele geri verilir ve en fazla 2 kez düzeltilir.
+5. **Konuşmalı**: "bunu ülkeye göre kır", "sadece Almanya" gibi takipler önceki turu bağlam alır. Cevabın altındaki takip soruları tıkla-sor'dur.
+6. **Düzelt ve öğren**: yanlış SQL'i yerinde düzeltip çalıştır, ya da doğru cevaba "Doğru" de. Doğrulananlar sonraki benzer sorularda öncelikli örnek olur.
+7. **Derin analiz**: "satışlar neden düştü?", "bu ayı geçen ayla karşılaştır" gibi sorular birkaç sorguyla çözülür (ya da `/analiz`). Sonuç satırları modele gittiği için bir kez onay ister.
+8. Sonuçları CSV/Excel indirebilir, grafik olarak görebilir, **zamanlanmış rapor veya uyarı**ya çevirebilirsin ("her pazartesi 09:00'da haftalık satışı gönder", "iade oranı %5'i geçerse haber ver"). Bildirimler uygulama içine, Telegram'a veya webhook'a gider.
+9. Geçmiş, bilgi katmanı ve işler veritabanına hiçbir şey yazılmadan yerelde (`%APPDATA%\NIQ`) tutulur.
+
+### Komut çubuğu
+
+`/` yazınca ya da `Ctrl+K` ile komutlar tahmin edilir: `/analiz`, `/rapor`, `/yeni`, `/baglan`, `/gecmis`, `/raporlar`, `/sozluk`, `/ayarlar`, `/temizle`. Zamanlama gibi görünen cümleleri ("her gün ... gönder") kendisi fark edip plan önizlemesi gösterir.
+
+### Sesli sorgu
+
+Mikrofon düğmesine bas, konuş, tekrar bas: kayıt metne çevrilir ve gönderilir. Ses yalnızca mikrofona bastığında sağlayıcıya gider. OpenRouter'da ses girdili bir model (varsayılan `google/gemini-3.5-flash-lite`), OpenAI'da `gpt-4o-mini-transcribe` kullanılır; modeli Ayarlar'dan değiştirebilirsin.
 
 ## Veritabanı bağlantısı
 

@@ -292,6 +292,17 @@ def save_connection():
     return jsonify(ok(profile.public(), "Bağlantı profili kaydedildi."))
 
 
+@api_bp.route("/connections/current", methods=["POST"])
+def save_current_connection():
+    """KRİTİK: şu an bağlı (kayıtsız) bağlantıyı profil olarak saklar. Parolası zaten güvenli depoda olduğu için yeniden girilmez."""
+    data = _body()
+    profile = state.manager().profile
+    require_approval(data, "save_connection", f"{profile.name} ({profile.user or 'kullanıcısız'})")
+    if not state.profiles.get(profile.id):
+        state.profiles.save(profile)
+    return jsonify(ok(profile.public(), "Bağlantı profili kaydedildi."))
+
+
 @api_bp.route("/connections/<ref>", methods=["DELETE"])
 def delete_connection(ref: str):
     """KRİTİK: profili ve kayıtlı parolasını siler (onay gerekir)."""
@@ -781,7 +792,10 @@ def test_ai():
 @api_bp.route("/health", methods=["GET"])
 def health_check():
     ai = state.ai_service
+    session_profile = session.get("PROFILE")
+    current = state.connector.profile if state.connector else (Profile.from_dict(session_profile) if session_profile else None)
     return jsonify(ok({
+        "profile": current.public() if current else None,
         "status": "healthy",
         "database_connected": bool(state.connector or session.get("PROFILE")),
         "ai_service_available": ai.ai_available,
