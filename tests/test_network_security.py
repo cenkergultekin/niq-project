@@ -259,3 +259,9 @@ def test_diagnose_reports_ssh_step_and_api_asks_approval(ssh_env, tmp_path, monk
 
     assert routes.state.connector is None
     assert diagnostics  # modül yüklü
+
+
+def test_mariadb_unknown_variable_is_not_reported_as_timeout():
+    message = friendly_error(Exception("(1193, \"Unknown system variable 'max_execution_time'\")"))
+    assert "saniye" not in message and "Unknown system variable" in message
+    assert "saniye" in friendly_error(Exception("Query execution was interrupted"))

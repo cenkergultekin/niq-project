@@ -25,7 +25,8 @@ class Dialect:
     file_based: bool = False
     # Güvenlik ağı olarak salt-okunur oturum ayarı (SQL, bağlantı açılışında)
     readonly_sql: List[str] = field(default_factory=list)
-    timeout_sql: Optional[str] = None            # {ms} yer tutucusu
+    timeout_sql: Optional[str] = None            # {ms} (milisaniye) ve {s} (saniye) yer tutucuları
+    timeout_sql_fallback: Optional[str] = None   # birincisi desteklenmiyorsa (ör. MariaDB)
     forbidden_functions: List[str] = field(default_factory=list)
     permission_hint: str = ""
     # Sistem şemaları (tablo listesinde gizlenir)
@@ -73,6 +74,7 @@ DIALECTS: Dict[str, Dialect] = {
         host_suggestions=["localhost", "127.0.0.1"],
         readonly_sql=["SET SESSION TRANSACTION READ ONLY"],
         timeout_sql="SET SESSION max_execution_time = {ms}",
+        timeout_sql_fallback="SET SESSION max_statement_time = {s}",  # MariaDB
         forbidden_functions=["LOAD_FILE", "SLEEP", "BENCHMARK", "GET_LOCK", "SYS_EXEC", "SYS_EVAL"],
         permission_hint="Salt-okunur kullanıcı için: CREATE USER 'niq_ro'@'%' IDENTIFIED BY '...'; GRANT SELECT ON mydb.* TO 'niq_ro'@'%';",
         system_schemas=["information_schema", "performance_schema", "mysql", "sys"],

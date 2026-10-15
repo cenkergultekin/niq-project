@@ -8,6 +8,7 @@ import logging
 import re
 import threading
 import time
+from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import create_engine, event, inspect, text
@@ -30,11 +31,16 @@ def display_name(schema: Optional[str], table: str, default_schema: Optional[str
     return f"{schema}.{table}"
 
 
+def _plain(value: Any) -> Any:
+    """Decimal (PostgreSQL numeric, MySQL/SQL Server decimal) sayı olarak döner; arayüz hizalar ve biçimler."""
+    return float(value) if isinstance(value, Decimal) else value
+
+
 def friendly_error(exc: Exception) -> str:
     """Sürücü hata zincirinden okunabilir tek satır çıkarır."""
     text_ = str(getattr(exc, "orig", None) or exc)
-    if re.search(r"HYT00|timeout expired|interrupted|statement timeout|max_execution_time|query execution was interrupted",
-                 text_, re.IGNORECASE) and not re.search(r"login|connect", text_, re.IGNORECASE):
+    if re.search(r"HYT00|timeout expired|interrupted|statement timeout|maximum statement execution time exceeded",
+                 text_, re.IGNORECASE) and not re.search(r"login|connect|unknown system variable", text_, re.IGNORECASE):
         return f"Sorgu {Config.QUERY_TIMEOUT} saniye sınırını aştı. Daha dar bir soru sorun (tarih aralığı, daha az tablo)."
     if "]" in text_ and "[" in text_:
         text_ = text_.rsplit("]", 1)[-1]
@@ -144,7 +150,14 @@ class Connector:
         for statement in self.dialect.readonly_sql:
             conn.exec_driver_sql(statement)
         if self.dialect.timeout_sql:
-            conn.exec_driver_sql(self.dialect.timeout_sql.format(ms=Config.QUERY_TIMEOUT * 1000))
+            values = {"ms": Config.QUERY_TIMEOUT * 1000, "s": Config.QUERY_TIMEOUT}
+            try:
+                conn.exec_driver_sql(self.dialect.timeout_sql.format(**values))
+            except Exception:
+                if not self.dialect.timeout_sql_fallback:
+                    raise
+                # MariaDB 'max_execution_time' değişkenini tanımaz; kendi karşılığı 'max_statement_time'
+                conn.exec_driver_sql(self.dialect.timeout_sql_fallback.format(**values))
 
     def test_connection(self) -> bool:
         try:
@@ -251,7 +264,7 @@ class Connector:
                     columns = [c or f"column_{i}" for i, c in enumerate(result.keys())]
                     rows = result.fetchmany(row_limit + 1)
                     truncated = len(rows) > row_limit
-                    data = [dict(zip(columns, row, strict=False)) for row in rows[:row_limit]]
+                    data = [dict(zip(columns, (_plain(v) for v in row), strict=False)) for row in rows[:row_limit]]
                     return QueryResponse(sql_query=sql_query, results=data, truncated=truncated)
                 finally:
                     conn.rollback()
