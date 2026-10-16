@@ -47,6 +47,17 @@ ANALYSIS_SCHEMA = {
     },
 }
 
+TABLES_SCHEMA = {
+    "name": "tables",
+    "strict": True,
+    "schema": {
+        "type": "object",
+        "properties": {"tables": {"type": "array", "items": {"type": "string"}}},
+        "required": ["tables"],
+        "additionalProperties": False,
+    },
+}
+
 SYSTEM_PROMPT = """You are an expert {sql_name} analyst. Convert the user's question into ONE read-only query.
 
 Rules:
@@ -56,6 +67,8 @@ Rules:
 - For "first/top n" questions use this dialect's row limiting syntax (TOP, LIMIT or FETCH FIRST). Use explicit column lists unless the user asks for everything.
 - Give columns readable aliases. Match the language of the question in aliases when natural.
 - If the question cannot be answered with the given schema, return the closest reasonable query and say so in the explanation.
+- Earlier turns of this conversation may follow. When the new message is a follow-up ("bunu ülkeye göre kır", "sadece Almanya",
+  "geçen yılla karşılaştır", "ilk 5"), modify the previous query accordingly instead of starting over.
 - Respond as JSON: {"sql": "...", "explanation": "..."}; the explanation is 1-2 sentences in Turkish.
 
 Database schema:
@@ -156,6 +169,7 @@ class AIService:
         previous_error: Optional[str] = None,
         dialect: Optional[Dialect] = None,
         context: str = "",
+        turns: Optional[list] = None,
     ) -> Dict[str, str]:
         """Soruyu SQL'e çevirir. previous_* verilirse hata düzeltme turudur."""
         dialect = dialect or get_dialect("mssql")
@@ -168,6 +182,11 @@ class AIService:
             messages.append({"role": "user", "content": example.question})
             messages.append({"role": "assistant", "content": json.dumps(
                 {"sql": example.sql_query, "explanation": ""}, ensure_ascii=False)})
+        for turn in turns or []:
+            messages.append({"role": "user", "content": turn.question})
+            summary = f"[result: {turn.row_count} rows; columns: {', '.join(turn.columns[:12])}]" if turn.columns else ""
+            messages.append({"role": "assistant", "content": json.dumps(
+                {"sql": turn.sql, "explanation": turn.explanation}, ensure_ascii=False) + ("\n" + summary if summary else "")})
         messages.append({"role": "user", "content": question})
         if previous_sql and previous_error:
             messages.append({"role": "assistant", "content": json.dumps(
@@ -182,6 +201,18 @@ class AIService:
         parsed = parse_sql_answer(raw)
         logger.info("SQL üretildi (%.1fs, model=%s)", time.time() - started, self.model)
         return parsed
+
+    def pick_tables(self, question: str, catalog: List[str], limit: int = 6) -> List[str]:
+        """Çok tablolu şemalarda soruyla ilgili tabloları seçer (yalnızca adlar ve notlar gider)."""
+        prompt = (
+            f"Pick the tables most likely needed to answer the question (at most {limit}). "
+            'Respond as JSON: {"tables": ["name", ...]} using the exact names from the catalog.\n\n'
+            f"Question: {question}\n\nCatalog:\n" + "\n".join(catalog)
+        )
+        raw = self._complete([{"role": "user", "content": prompt}], TABLES_SCHEMA)
+        data = _extract_json(raw) or {}
+        tables = data.get("tables") if isinstance(data.get("tables"), list) else []
+        return [str(t) for t in tables][:limit]
 
     # --- sonuç yorumu (isteğe bağlı) -------------------------------------
     def analyze_results(self, question: str, sql: str, rows: List[Dict[str, Any]]) -> Optional[Dict[str, str]]:

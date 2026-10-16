@@ -41,7 +41,7 @@ from backend.db.tunnel import HostKeyUnknown
 from backend.services.ai_service import AIService, AIServiceError, AIUnavailableError
 from backend.services.history import HistoryStore
 from backend.services.knowledge import KnowledgeStore
-from backend.services.query_service import run_question, run_sql, suggest_tables
+from backend.services.query_service import run_question, run_sql
 
 EXIT_OK, EXIT_ERROR, EXIT_USAGE, EXIT_APPROVAL = 0, 1, 2, 3
 
@@ -230,11 +230,8 @@ def cmd_ask(args, store):
     connector = open_connector(args, store)
     history = HistoryStore()
     try:
-        tables = [t.strip() for t in args.tables.split(",")] if args.tables else suggest_tables(connector, history, args.question)
-        if not tables:
-            raise CliError("Soruyla eşleşen tablo bulunamadı. --tables ile belirtin.", extra={"tables": connector.get_tables()[:50]})
+        tables = [t.strip() for t in args.tables.split(",")] if args.tables else None
         payload, _ = run_question(connector, AIService(), history, KnowledgeStore(), args.question, tables)
-        payload["tables_used"] = tables
         return payload
     except (AIUnavailableError, AIServiceError) as exc:
         raise CliError(str(exc)) from exc
@@ -297,7 +294,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("ask", help="doğal dil sorusu -> SQL -> sonuç (AI anahtarı gerekir)")
     add_profile_args(p)
     p.add_argument("question")
-    p.add_argument("--tables", help="virgülle ayrılmış tablolar (boşsa sorudan tahmin edilir)")
+    p.add_argument("--tables", help="virgülle ayrılmış tablolar (boşsa otomatik seçilir)")
     p.set_defaults(func=cmd_ask)
 
     p = sub.add_parser("ai", help="AI sağlayıcı durumu / test")
