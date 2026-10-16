@@ -20,6 +20,9 @@ python-dotenv>=1.0.0
 # Excel dışa aktarma
 openpyxl>=3.1
 
+# MCP sunucusu (agent'lar için güvenli veritabanı aracı)
+mcp>=2.0
+
 # SQL doğrulama (AST)
 sqlglot>=25.0
 

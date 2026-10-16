@@ -41,6 +41,12 @@ Bu dosya, NIQ'yu kullanan veya geliştiren bir agent içindir. NIQ doğal dil so
 
 SQL Server (`mssql`), PostgreSQL (`postgresql`), MySQL / MariaDB (`mysql`), SQLite (`sqlite`, dosya salt-okunur açılır). Yeni tür eklemek için `backend/db/dialects.py` içine bir `Dialect` kaydı eklenir; bağlantı, şema okuma, SQL doğrulama ve AI istemi bu kayıttan beslenir.
 
+## MCP
+
+`niq_mcp.py` aynı güvenlik katmanını MCP aracı olarak sunar (stdio). Agent olarak NIQ'yu MCP ile kullanıyorsan: önce `list_connections`,
+iş terimi geçen sorularda `get_glossary`, sonra `ask` veya kendi SELECT'inle `run_sql`. Yeni bağlantı, zamanlama ve bildirim
+kanalı kurma araçları bilerek yoktur; bunlar kullanıcı onayı gerektirir.
+
 ## Geliştirme
 
 ```bash

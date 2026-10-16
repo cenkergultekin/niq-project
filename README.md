@@ -38,6 +38,22 @@ python niq_cli.py connections save --input "postgresql://kullanici@host/db" --na
 python niq_cli.py ask --connection uretim "geçen ayın toplam satışı"
 ```
 
+## MCP sunucusu (agent'lar için)
+
+`niq_mcp.py`, Claude Desktop, Claude Code, Cursor gibi agent'lara NIQ'yu bir araç olarak açar. Agent ham veritabanı bağlantısı
+yerine NIQ'nun katmanlarını kullanır: salt-okunur doğrulanmış SQL, iş sözlüğü, tablo notları ve doğrulanmış örnekler.
+Parola agent'a gösterilmez; agent yalnızca sizin NIQ'da kaydettiğiniz profilleri kullanır ve yeni bağlantı, zamanlama
+ya da bildirim kanalı kuramaz.
+
+Araçlar: `list_connections`, `list_tables`, `describe_tables`, `get_glossary`, `ask`, `run_sql`, `add_glossary_term`,
+`list_reports`, `recent_results`, `status`.
+
+Claude Desktop için `claude_desktop_config.json`:
+```json
+{"mcpServers": {"niq": {"command": "C:\\yol\\NIQ\\venv\\Scripts\\python.exe", "args": ["C:\\yol\\NIQ\\niq_mcp.py"]}}}
+```
+Claude Code için: `claude mcp add niq -- C:\yol\NIQ\venv\Scripts\python.exe C:\yol\NIQ\niq_mcp.py`
+
 ## Güvenlik
 
 - Veritabanına yazma yoktur: INSERT/UPDATE/DELETE/DDL/EXEC/`SELECT INTO`/`OPENROWSET` reddedilir. Yine de uygulamayı **salt-okunur bir SQL kullanıcısıyla** kullanmanız önerilir.
