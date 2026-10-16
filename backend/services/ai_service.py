@@ -1,351 +1,277 @@
 """
-AI service for natural language to SQL conversion.
-Handles OpenAI API interactions and prompt engineering.
+AI servisi: doğal dil -> T-SQL ve (isteğe bağlı) sonuç yorumu.
+
+OpenAI, OpenRouter ve yerel OpenAI-uyumlu sunucular (Ollama, LM Studio) aynı
+SDK ile konuşur. Çıktı JSON şemasıyla istenir; sağlayıcı/model şemayı
+desteklemiyorsa düz metne düşülür ve toleranslı ayrıştırıcı kullanılır.
 """
-from typing import List, Dict
-from openai import OpenAI
-from backend.models.models import DatabaseSchema, QueryRequest
-from backend.config.config import Config
+import json
 import logging
+import re
+import time
+from typing import Any, Dict, List, Optional
+
+from openai import APIStatusError, BadRequestError, OpenAI
+
+from backend.config.config import Settings
+from backend.db.dialects import Dialect, get_dialect
+from backend.models.models import DatabaseSchema, SavedQuery
 
 logger = logging.getLogger(__name__)
 
+SQL_SCHEMA = {
+    "name": "sql_answer",
+    "strict": True,
+    "schema": {
+        "type": "object",
+        "properties": {
+            "sql": {"type": "string", "description": "Tek bir T-SQL SELECT sorgusu"},
+            "explanation": {"type": "string", "description": "Sorgunun ne yaptığı, 1-2 cümle Türkçe"},
+        },
+        "required": ["sql", "explanation"],
+        "additionalProperties": False,
+    },
+}
+
+ANALYSIS_SCHEMA = {
+    "name": "analysis",
+    "strict": True,
+    "schema": {
+        "type": "object",
+        "properties": {
+            "summary": {"type": "string"},
+            "analysis": {"type": "string"},
+        },
+        "required": ["summary", "analysis"],
+        "additionalProperties": False,
+    },
+}
+
+SYSTEM_PROMPT = """You are an expert {sql_name} analyst. Convert the user's question into ONE read-only query.
+
+Rules:
+- Use ONLY the tables and columns in the schema below; copy names exactly ({quoting}).
+- Output a single SELECT statement (CTEs and UNION are allowed). Never write INSERT, UPDATE, DELETE, DDL, EXEC or temp tables.
+- Use the foreign keys to JOIN tables correctly. Do not reference tables that are not listed.
+- For "first/top n" questions use this dialect's row limiting syntax (TOP, LIMIT or FETCH FIRST). Use explicit column lists unless the user asks for everything.
+- Give columns readable aliases. Match the language of the question in aliases when natural.
+- If the question cannot be answered with the given schema, return the closest reasonable query and say so in the explanation.
+- Respond as JSON: {"sql": "...", "explanation": "..."}; the explanation is 1-2 sentences in Turkish.
+
+Database schema:
+{schema}
+"""
+
+# Sıcaklık parametresini reddeden düşünen (reasoning) model aileleri
+_NO_TEMPERATURE = re.compile(r"(^|/)(o\d|gpt-5|gpt-6)", re.IGNORECASE)
+
+
+class AIUnavailableError(Exception):
+    """API anahtarı/sağlayıcı yapılandırılmamış."""
+
 
 class AIService:
-    """Service for AI-powered natural language to SQL conversion."""
-    
     def __init__(self):
-        """Initialize AI service with OpenAI client."""
-        try:
-            # Check if API key exists
-            if not Config.get_provider():
-                raise ValueError("OPENAI_API_KEY or OPENROUTER_API_KEY not found in environment variables")
-            
-            self.client = OpenAI(**Config.get_openai_config())
-            self.model = Config.get_model()
-            self.ai_available = True
-            logger.info(f"AI service initialized successfully with model: {self.model}")
-        except Exception as e:
-            logger.error(f"AI service initialization failed: {e}")
-            self.client = None
-            self.model = None
-            self.ai_available = False
-    
-    def convert_natural_to_sql(
-        self, 
-        request: QueryRequest, 
-        schema: DatabaseSchema
-    ) -> str:
-        """
-        Convert natural language question to SQL query.
-        
-        Args:
-            request: Query request with question and tables
-            schema: Database schema information
-            
-        Returns:
-            Generated SQL query string
-            
-        Raises:
-            ValueError: If request is invalid
-            Exception: If AI service fails
-        """
-        try:
-            # Validate request
-            if not request.question.strip():
-                raise ValueError("Question cannot be empty")
-            
-            if not request.tables:
-                raise ValueError("At least one table must be specified")
-            
-            # Get relevant schema information
-            relevant_schema = self._get_relevant_schema(request.tables, schema)
-            
-            # Generate prompt
-            prompt = self._generate_prompt(request.question, relevant_schema)
-            
-            # Call OpenAI API
-            response = self._call_openai_api(prompt)
-            
-            # Clean and validate SQL
-            sql_query = self._clean_sql_response(response)
-            
-            logger.info(f"Generated SQL query: {sql_query}")
-            return sql_query
-            
-        except Exception as e:
-            logger.error(f"Error converting natural language to SQL: {e}")
-            raise
-    
-    def _get_relevant_schema(
-        self, 
-        table_names: List[str], 
-        schema: DatabaseSchema
-    ) -> Dict[str, List[str]]:
-        """Get schema information for relevant tables only."""
-        relevant_schema = {}
-        
-        for table_name in table_names:
-            if table_name in schema.tables:
-                relevant_schema[table_name] = schema.get_table_columns(table_name)
-            else:
-                logger.warning(f"Table '{table_name}' not found in schema")
-        
-        return relevant_schema
-    
-    def _generate_prompt(self, question: str, schema: Dict[str, List[str]]) -> str:
-        """Generate prompt for OpenAI API."""
-        schema_str = self._format_schema_for_prompt(schema)
-        
-        prompt = f"""
-You are an expert SQL developer specializing in SQL Server. 
-Your task is to convert natural language questions into accurate SQL Server queries.
+        self.client: Optional[OpenAI] = None
+        self.config: Dict[str, Any] = {}
+        self.reconfigure()
 
-Database Schema:
-{schema_str}
+    # --- yapılandırma -----------------------------------------------------
+    def reconfigure(self) -> None:
+        """Ayarları (sağlayıcı, model, anahtar) yeniden okuyup istemciyi kurar."""
+        self.config = Settings.ai_config()
+        self.client = None
+        if not self.config["api_key"]:
+            logger.info("AI sağlayıcısı (%s) için API anahtarı yok", self.config["provider"])
+            return
+        kwargs: Dict[str, Any] = {"api_key": self.config["api_key"], "timeout": 60.0, "max_retries": 1}
+        if self.config["base_url"]:
+            kwargs["base_url"] = self.config["base_url"]
+        if self.config["provider"] == "openrouter":
+            kwargs["default_headers"] = {"X-Title": "NIQ Desktop"}
+        self.client = OpenAI(**kwargs)
+        logger.info("AI hazır: %s / %s", self.config["provider"], self.config["model"])
 
-Instructions:
-1. Use ONLY the tables and columns provided in the schema above
-2. Write valid SQL Server syntax
-3. Use proper JOINs when multiple tables are involved
-4. Include appropriate WHERE clauses for filtering
-5. Use meaningful column aliases when needed
-6. Return ONLY the SQL query, no explanations or markdown formatting
+    @property
+    def ai_available(self) -> bool:
+        return self.client is not None
 
-Question: {question}
+    @property
+    def model(self) -> str:
+        return self.config.get("model", "")
 
-SQL Query:
-"""
-        return prompt.strip()
-    
-    def _format_schema_for_prompt(self, schema: Dict[str, List[str]]) -> str:
-        """Format schema information for the prompt."""
-        schema_lines = []
-        for table_name, columns in schema.items():
-            columns_str = ", ".join(columns)
-            schema_lines.append(f"{table_name}: {columns_str}")
-        
-        return "\n".join(schema_lines)
-    
-    def _call_openai_api(self, prompt: str) -> str:
-        """Call OpenAI API with the generated prompt."""
-        try:
-            # For OpenAI v2.3.0+ (Python 3.10+ compatible)
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=500,
-                temperature=0.1
-            )
-            
-            return response.choices[0].message.content.strip()
-            
-        except Exception as e:
-            logger.error(f"OpenAI API call failed: {e}")
-            raise Exception(f"AI service error: {str(e)}")
-    
-    def _clean_sql_response(self, response: str) -> str:
-        """Clean and validate SQL response from AI."""
-        # Remove markdown code blocks if present
-        sql_query = response.replace("```sql", "").replace("```", "").strip()
-        
-        # Basic validation
-        if not sql_query:
-            raise ValueError("Empty SQL query generated")
-        
-        # Ensure it starts with a valid SQL keyword
-        sql_upper = sql_query.upper().strip()
-        valid_keywords = ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'WITH']
-        
-        if not any(sql_upper.startswith(keyword) for keyword in valid_keywords):
-            raise ValueError(f"Invalid SQL query: {sql_query}")
-        
-        return sql_query
+    # --- çağrı ------------------------------------------------------------
+    def _complete(self, messages: List[Dict[str, str]], schema: Optional[Dict[str, Any]],
+                  max_tokens: Optional[int] = None, temperature: float = 0.0) -> str:
+        """Tek bir sohbet tamamlama. Şema/temperature desteklenmezse sırayla geri çekilir."""
+        if not self.client:
+            raise AIUnavailableError("AI için API anahtarı ayarlanmamış. Ayarlar sayfasından ekleyin.")
 
-    def summarize_sql(self, question: str, sql_query: str) -> Dict[str, str]:
-        """Generate a brief natural-language summary and conversational analysis for a SQL query.
+        limit = max_tokens or self.config["max_output_tokens"]
+        # Yerel sunucular eski max_tokens adını bekler; OpenAI/OpenRouter için doğru alan max_completion_tokens
+        limit_key = "max_tokens" if self.config["provider"] == "local" else "max_completion_tokens"
+        params: Dict[str, Any] = {"model": self.config["model"], "messages": messages, limit_key: limit}
+        use_temperature = not _NO_TEMPERATURE.search(self.config["model"])
+        if use_temperature:
+            params["temperature"] = temperature
+        if schema:
+            params["response_format"] = {"type": "json_schema", "json_schema": schema}
 
-        Returns a dict with keys: summary (str) and analysis (str).
-        """
-        if not self.ai_available:
-            logger.warning("AI service not available, returning fallback SQL summary")
-            return {
-                "summary": f"Bu sorgu '{question}' sorusuna yanıt veriyor. SQL sorgusu başarıyla oluşturuldu.",
-                "analysis": f"Sorgu sonuçlarına göre verilerinizde önemli bilgiler bulunuyor. Analiz için sonuçları inceleyebilirsiniz."
-            }
-        
-        try:
-            prompt = f"""
-Sen bir iş analisti ve rapor uzmanısın. Kullanıcının sorusu ve SQL sorgusu verilmiş. 
-Türkçe olarak şunları üret:
-
-1) Kısa açıklama: Sorgunun ne yaptığını 2-3 cümleyle açıkla
-2) Doğal analiz: Kullanıcıyla konuşur gibi, sonuçlarda ne göreceğini detaylı anlat. 
-   Örnek: "Bu rapora göre 2023 yılında toplam satışlarınız X miktarında gerçekleşmiş. 
-   En yüksek performansı Y ayında göstermişsiniz, Z kategorisinde ise dikkat çekici bir artış var. 
-   Müşteri segmentlerinde A grubu %B payla öne çıkıyor ve C bölgesinde potansiyel görüyorum."
-   
-   Gerçek veri olmadığı için genel eğilimleri, karşılaştırmaları, önemli noktaları vurgula.
-   Sanki kullanıcıya rapor sunuyormuş gibi yaz. 4-5 cümle, samimi ve profesyonel ton.
-
-Kullanıcı sorusu:
-{question}
-
-SQL sorgusu:
-{sql_query}
-
-Format:
-- Summary: <2-3 cümle>
-- Analysis: <4-5 cümle, doğal konuşma tarzı>
-"""
-
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=400,
-                temperature=0.3
-            )
-            content = response.choices[0].message.content.strip()
-
-            # Simple parsing: split summary and analysis
-            lines = [l.strip() for l in content.splitlines() if l.strip()]
-            summary_lines = []
-            analysis_lines: List[str] = []
-            mode = "summary"
-            for line in lines:
-                low = line.lower()
-                if low.startswith("- summary") or low.startswith("summary:"):
-                    mode = "summary"
+        for _ in range(3):
+            try:
+                response = self.client.chat.completions.create(**params)
+                break
+            except BadRequestError as exc:
+                detail = str(exc).lower()
+                if "response_format" in params and ("response_format" in detail or "json_schema" in detail or "structured" in detail):
+                    params.pop("response_format")
                     continue
-                if low.startswith("- analysis") or low.startswith("analysis:") or low.startswith("- analiz") or low.startswith("analiz:"):
-                    mode = "analysis"
+                if "temperature" in params and "temperature" in detail:
+                    params.pop("temperature")
                     continue
-                if mode == "summary":
-                    summary_lines.append(line.lstrip("- "))
-                elif mode == "analysis":
-                    analysis_lines.append(line.lstrip("- "))
+                raise AIServiceError(_describe_error(exc)) from exc
+            except APIStatusError as exc:
+                raise AIServiceError(_describe_error(exc)) from exc
+            except Exception as exc:
+                raise AIServiceError(f"AI servisine ulaşılamadı: {exc}") from exc
+        else:
+            raise AIServiceError("AI isteği parametre uyuşmazlığı nedeniyle tamamlanamadı")
 
-            summary = " ".join(summary_lines)
-            analysis = " ".join(analysis_lines)
-            return {"summary": summary, "analysis": analysis}
-        except Exception as e:
-            logger.error(f"OpenAI summary generation failed: {e}")
-            # Fallback: very basic template
-            return {
-                "summary": "Sorgu, girilen soruya göre ilgili tabloları kullanarak verileri getirir.",
-                "analysis": "Bu rapora göre verilerinizde genel eğilimler ve önemli noktalar görülüyor. Tarih bazında artış ve azalış dönemleri, en yüksek ve en düşük performans gösteren kategoriler ile dikkat çekici segmentler bulunuyor. Detaylı analiz için sonuçları inceleyebilirsiniz."
-            }
-
-    def summarize_results(self, question: str, sql_query: str, results: List[Dict]) -> Dict[str, str]:
-        """Generate a brief Turkish business summary and conversational analysis over actual query results.
-
-        Returns dict with keys: summary (str) and analysis (str).
-        """
-        if not self.ai_available:
-            logger.warning("AI service not available, returning fallback summary")
-            return {
-                "summary": f"Bu sorgu '{question}' sorusuna yanıt veriyor. {len(results)} kayıt bulundu.",
-                "analysis": f"Sorgu sonuçlarına göre {len(results)} kayıt analiz edildi. Verilerinizde önemli trendler ve karşılaştırmalar bulunuyor."
-            }
-        
-        # Test AI connection
-        try:
-            test_response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": "Test"}],
-                max_tokens=10
+        choice = response.choices[0]
+        content = (choice.message.content or "").strip()
+        if choice.finish_reason == "length" and not content:
+            raise AIServiceError(
+                "Model çıktı limitine takıldı ve cevap üretemedi. Ayarlar'dan 'Çıktı belirteç limiti'ni artırın "
+                "veya düşünen olmayan bir model seçin."
             )
-            logger.info("AI connection test successful")
-        except Exception as e:
-            logger.error(f"AI connection test failed: {e}")
-            return {
-                "summary": f"Bu sorgu '{question}' sorusuna yanıt veriyor. {len(results)} kayıt bulundu.",
-                "analysis": f"Sorgu sonuçlarına göre {len(results)} kayıt analiz edildi. Verilerinizde önemli trendler ve karşılaştırmalar bulunuyor."
-            }
-        
+        return content
+
+    # --- SQL üretimi ------------------------------------------------------
+    def generate_sql(
+        self,
+        question: str,
+        schema: DatabaseSchema,
+        examples: Optional[List[SavedQuery]] = None,
+        previous_sql: Optional[str] = None,
+        previous_error: Optional[str] = None,
+        dialect: Optional[Dialect] = None,
+    ) -> Dict[str, str]:
+        """Soruyu SQL'e çevirir. previous_* verilirse hata düzeltme turudur."""
+        dialect = dialect or get_dialect("mssql")
+        system = (SYSTEM_PROMPT.replace("{sql_name}", dialect.sql_name).replace("{quoting}", dialect.quoting)
+                  .replace("{schema}", format_schema(schema)))
+        messages: List[Dict[str, str]] = [{"role": "system", "content": system}]
+        for example in examples or []:
+            messages.append({"role": "user", "content": example.question})
+            messages.append({"role": "assistant", "content": json.dumps(
+                {"sql": example.sql_query, "explanation": ""}, ensure_ascii=False)})
+        messages.append({"role": "user", "content": question})
+        if previous_sql and previous_error:
+            messages.append({"role": "assistant", "content": json.dumps(
+                {"sql": previous_sql, "explanation": ""}, ensure_ascii=False)})
+            messages.append({"role": "user", "content": (
+                f"That query failed with this error:\n{previous_error}\n"
+                "Fix it. Return the corrected single SELECT query as JSON."
+            )})
+
+        started = time.time()
+        raw = self._complete(messages, SQL_SCHEMA)
+        parsed = parse_sql_answer(raw)
+        logger.info("SQL üretildi (%.1fs, model=%s)", time.time() - started, self.model)
+        return parsed
+
+    # --- sonuç yorumu (isteğe bağlı) -------------------------------------
+    def analyze_results(self, question: str, sql: str, rows: List[Dict[str, Any]]) -> Optional[Dict[str, str]]:
+        """İlk 20 satırı özetletir. Çağıran yalnızca kullanıcı açıkça izin verdiyse çağırır."""
+        if not self.client or not rows:
+            return None
+        sample = [{k: _clip(v) for k, v in row.items()} for row in rows[:20]]
+        prompt = (
+            "Kullanıcının sorusu, çalıştırılan SQL ve sonuçların ilk satırları aşağıda. "
+            "Türkçe yaz. 'summary': sonucu 1-2 cümleyle özetle. 'analysis': sayıları kullanarak "
+            "2-4 cümlelik kısa yorum yap; veride olmayan şeyi uydurma.\n\n"
+            f"Soru: {question}\nSQL: {sql}\nSatır sayısı: {len(rows)}\n"
+            f"Örnek satırlar (JSON): {json.dumps(sample, ensure_ascii=False, default=str)}"
+        )
         try:
-            # Limit payload size for the LLM
-            sample = results[:50]
-            sample_preview = sample[:10]
-            
-            # Format results as structured text for better AI understanding
-            import json
-            
-            # Create a more readable format for AI
-            results_text = "TABLO SONUÇLARI:\n"
-            if sample_preview:
-                headers = list(sample_preview[0].keys())
-                results_text += "Sütunlar: " + ", ".join(headers) + "\n\n"
-                
-                for i, row in enumerate(sample_preview, 1):
-                    results_text += f"Satır {i}:\n"
-                    for key, value in row.items():
-                        results_text += f"  {key}: {value}\n"
-                    results_text += "\n"
-            else:
-                results_text += "Sonuç bulunamadı.\n"
-            
-            prompt = f"""
-Sen bir iş analisti ve rapor uzmanısın. Kullanıcının sorusu, SQL sorgusu ve gerçek sonuçlar verilmiş.
-Türkçe olarak şunları üret:
+            raw = self._complete([{"role": "user", "content": prompt}], ANALYSIS_SCHEMA, temperature=0.3)
+            data = _extract_json(raw) or {}
+            if data.get("summary") or data.get("analysis"):
+                return {"summary": str(data.get("summary", "")), "analysis": str(data.get("analysis", ""))}
+            return {"summary": raw[:400], "analysis": ""}
+        except Exception as exc:
+            logger.warning("Sonuç analizi alınamadı: %s", exc)
+            return None
 
-1) Kısa özet: Sorgunun ne yaptığını 2-3 cümleyle açıkla
-2) Doğal analiz: Gerçek verilere bakarak kullanıcıyla konuşur gibi detaylı rapor sun. 
-   Örnek: "Bu rapora göre 2023 yılında toplam satışlarınız 150.000 TL olarak gerçekleşmiş. 
-   En yüksek performansı Aralık ayında 25.000 TL ile göstermişsiniz, yaz aylarında ise 
-   düşüş yaşanmış. Müşteri segmentlerinde kurumsal müşteriler %60 payla öne çıkıyor ve 
-   İstanbul bölgesinde potansiyel görüyorum."
-   
-   Gerçek sayıları, tarihleri, kategorileri kullan. Trendleri, karşılaştırmaları, 
-   önemli noktaları vurgula. Sanki kullanıcıya rapor sunuyormuş gibi yaz. 
-   4-5 cümle, samimi ve profesyonel ton.
+    def ping(self) -> Dict[str, Any]:
+        """Bağlantı testi: küçük bir istek atar, süreyi ve model adını döndürür."""
+        started = time.time()
+        self._complete([{"role": "user", "content": "Reply with the single word: ok"}], None, max_tokens=64)
+        return {"ok": True, "latency_ms": int((time.time() - started) * 1000),
+                "provider": self.config["provider"], "model": self.config["model"]}
 
-Kullanıcı sorusu:
-{question}
 
-SQL:
-{sql_query}
+class AIServiceError(Exception):
+    """Kullanıcıya gösterilebilir AI hatası."""
 
-{results_text}
 
-Format:
-- Özet: <2-3 cümle>
-- Analiz: <4-5 cümle, doğal konuşma tarzı, gerçek verilerle>
-"""
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=400,
-                temperature=0.3
-            )
-            content = response.choices[0].message.content.strip()
+def _describe_error(exc: Exception) -> str:
+    status = getattr(exc, "status_code", None)
+    if status == 401:
+        return "API anahtarı geçersiz veya yetkisiz (401). Ayarlar'dan anahtarı kontrol edin."
+    if status == 402:
+        return "Hesapta kredi/bakiye yetersiz (402)."
+    if status == 404:
+        return "Model bulunamadı (404). Ayarlar'dan model adını kontrol edin."
+    if status == 429:
+        return "İstek limiti aşıldı (429). Biraz sonra tekrar deneyin."
+    body = getattr(exc, "message", None) or str(exc)
+    return f"AI hatası ({status}): {body}"[:300]
 
-            # Simple parse similar to summarize_sql
-            lines = [l.strip() for l in content.splitlines() if l.strip()]
-            summary_lines: List[str] = []
-            analysis_lines: List[str] = []
-            mode = "summary"
-            for line in lines:
-                low = line.lower()
-                if low.startswith("- özet") or low.startswith("- ozet") or low.startswith("özet:") or low.startswith("ozet:") or low.startswith("- summary") or low.startswith("summary:"):
-                    mode = "summary"
-                    continue
-                if low.startswith("- analiz") or low.startswith("analiz:") or low.startswith("- analysis") or low.startswith("analysis:"):
-                    mode = "analysis"
-                    continue
-                if mode == "summary":
-                    summary_lines.append(line.lstrip("- "))
-                elif mode == "analysis":
-                    analysis_lines.append(line.lstrip("- "))
 
-            summary = " ".join(summary_lines)
-            analysis = " ".join(analysis_lines)
-            return {"summary": summary, "analysis": analysis}
-        except Exception as e:
-            logger.error(f"OpenAI results summary failed: {e}")
-            return {
-                "summary": "Sonuçlar genel olarak beklenen eğilimleri gösteriyor; metrikleri dönem bazında karşılaştırın.",
-                "analysis": "Bu rapora göre verilerinizde önemli trendler ve karşılaştırmalar görülüyor. Dönemsel artış ve azalış dönemleri, en yüksek performans gösteren kategoriler ve dikkat çekici segmentler bulunuyor. Detaylı analiz için sonuçları inceleyebilirsiniz."
-            }
+def _clip(value: Any, limit: int = 80) -> Any:
+    text = value if isinstance(value, (int, float, bool)) or value is None else str(value)
+    return text[:limit] if isinstance(text, str) else text
+
+
+def format_schema(schema: DatabaseSchema) -> str:
+    """Şemayı modele kompakt, tip ve ilişki bilgisiyle verir."""
+    lines: List[str] = []
+    for table in schema.tables.values():
+        columns = ", ".join(
+            f"{c.name} {c.data_type}" + (" PK" if c.name in table.primary_key else "") for c in table.columns
+        )
+        lines.append(f"TABLE {table.name} ({columns})")
+        for column, target, target_column in table.foreign_keys:
+            lines.append(f"  FK {table.name}.{column} -> {target}.{target_column}")
+    return "\n".join(lines)
+
+
+def _extract_json(text: str) -> Optional[Dict[str, Any]]:
+    """Metinden ilk JSON nesnesini çıkarır (kod çiti veya ek açıklama olsa da)."""
+    text = text.strip()
+    try:
+        data = json.loads(text)
+        return data if isinstance(data, dict) else None
+    except ValueError:
+        pass
+    match = re.search(r"\{.*\}", text, re.DOTALL)
+    if match:
+        try:
+            data = json.loads(match.group(0))
+            return data if isinstance(data, dict) else None
+        except ValueError:
+            return None
+    return None
+
+
+def parse_sql_answer(raw: str) -> Dict[str, str]:
+    """Model cevabından {sql, explanation} çıkarır: JSON, kod çiti ya da çıplak SQL."""
+    data = _extract_json(raw)
+    if data and isinstance(data.get("sql"), str) and data["sql"].strip():
+        return {"sql": data["sql"].strip(), "explanation": str(data.get("explanation", "")).strip()}
+    fenced = re.search(r"```(?:sql)?\s*(.*?)```", raw, re.DOTALL | re.IGNORECASE)
+    sql = (fenced.group(1) if fenced else raw).strip()
+    if not sql:
+        raise AIServiceError("Model boş cevap döndürdü")
+    return {"sql": sql, "explanation": ""}

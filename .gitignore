@@ -71,3 +71,7 @@ coverage.xml
 .mypy_cache/
 .dmypy.json
 dmypy.json
+# Yerel/gelistirme
+sorgularim.txt
+.claude/
+perest-ico

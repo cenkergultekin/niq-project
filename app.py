@@ -1,117 +1,72 @@
 """
-Main Flask application factory.
-Creates and configures the Flask application.
+Flask uygulama fabrikası.
 """
-import sys
-import os
-from flask import Flask, render_template
 import logging
-import atexit
+import os
+import sys
+from datetime import timedelta
+from urllib.parse import urlparse
 
-# PyInstaller için path düzeltmesi
-if getattr(sys, 'frozen', False):
-    # PyInstaller bundle içindeyiz
-    bundle_dir = sys._MEIPASS
-    exe_dir = os.path.dirname(sys.executable)
-    
-    # Working directory'yi executable'ın bulunduğu dizine ayarla
-    os.chdir(exe_dir)
-    
-    # Template ve static klasörlerini bundle içinden al
-    template_folder = os.path.join(bundle_dir, 'frontend', 'templates')
-    static_folder = os.path.join(bundle_dir, 'frontend', 'static')
-    
-    # Debug için path'leri yazdır ve dosyaya kaydet
-    debug_info = f"""
-=== NIQ Debug Info (Natural Intelligence Query) ===
-Bundle dir: {bundle_dir}
-Template folder: {template_folder}
-Static folder: {static_folder}
-Template exists: {os.path.exists(template_folder)}
-Static exists: {os.path.exists(static_folder)}
-Working dir: {os.getcwd()}
-Exe dir: {exe_dir}
-"""
-    print(debug_info)
-    
-    # Debug bilgilerini dosyaya kaydet
-    try:
-        with open('debug.log', 'w', encoding='utf-8') as f:
-            f.write(debug_info)
-            if os.path.exists(template_folder):
-                f.write(f"Template files: {os.listdir(template_folder)}\n")
-            if os.path.exists(static_folder):
-                f.write(f"Static files: {os.listdir(static_folder)}\n")
-    except Exception as e:
-        print(f"Debug log yazma hatası: {e}")
-    
-    # Uygulama verilerini exe dizininde sakla
-    os.environ['SQL_AGENT_HOME'] = exe_dir
-else:
-    # Normal Python çalıştırması
-    template_folder = 'frontend/templates'
-    static_folder = 'frontend/static'
+from flask import Flask, abort, render_template, request
 
 from backend.config.config import Config
-from backend.routes.routes import api_bp, db_routes
-from backend.core.utils import LoggingUtils
+from backend.core.utils import setup_logging
+from backend.routes.routes import api_bp
+
+# PyInstaller paketinde şablon ve statik dosyalar _MEIPASS altındadır
+BASE_DIR = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+LOCAL_HOSTNAMES = {"127.0.0.1", "localhost", "::1"}
 
 
 def create_app() -> Flask:
-    """
-    Application factory pattern.
-    Creates and configures Flask application.
-    
-    Returns:
-        Configured Flask application
-    """
-    # Validate configuration
-    Config.validate_config()
-    
-    # Setup logging
-    LoggingUtils.setup_logging()
-    logger = logging.getLogger(__name__)
-    
-    # Create Flask app with dynamic template and static folders
-    app = Flask(__name__, 
-                template_folder=template_folder,
-                static_folder=static_folder)
-    
-    # Configure app
-    app.config['SECRET_KEY'] = Config.SECRET_KEY
-    app.config['DEBUG'] = False  # Desktop sürümde debug kapalı
-    app.config['TEMPLATES_AUTO_RELOAD'] = False
-    app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
-    
-    # Register blueprints
+    setup_logging()
+    app = Flask(
+        __name__,
+        template_folder=os.path.join(BASE_DIR, "frontend", "templates"),
+        static_folder=os.path.join(BASE_DIR, "frontend", "static"),
+    )
+    app.config.update(
+        SECRET_KEY=Config.secret_key(),
+        DEBUG=False,
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE="Strict",
+        PERMANENT_SESSION_LIFETIME=timedelta(days=30),
+        SEND_FILE_MAX_AGE_DEFAULT=0,
+    )
+
+    @app.before_request
+    def local_only_guard():
+        """DNS rebinding ve başka sitelerden gelen istekleri engeller: yalnızca yerel Host/Origin."""
+        if urlparse("//" + request.host).hostname not in LOCAL_HOSTNAMES:
+            abort(403)
+        origin = request.headers.get("Origin")
+        if origin and request.method not in ("GET", "HEAD", "OPTIONS"):
+            if urlparse(origin).hostname not in LOCAL_HOSTNAMES:
+                abort(403)
+
     app.register_blueprint(api_bp)
-    
-    
-    # Register main route
+
     @app.route("/")
     def index():
-        """Serve main application page."""
         return render_template("index.html")
-    
-    # Error handlers
+
     @app.errorhandler(404)
-    def not_found(error):
-        """Handle 404 errors."""
+    def not_found(_error):
         return {"error": "Endpoint not found"}, 404
-    
+
+    @app.errorhandler(403)
+    def forbidden(_error):
+        return {"error": "Forbidden"}, 403
+
     @app.errorhandler(500)
     def internal_error(error):
-        """Handle 500 errors."""
-        logger.error(f"Internal server error: {error}")
+        logging.getLogger(__name__).error("Internal server error: %s", error)
         return {"error": "Internal server error"}, 500
-    
-    logger.info("Flask application created successfully")
+
     return app
 
 
-# Create app instance
 app = create_app()
 
-
 if __name__ == "__main__":
-    app.run(debug=False, host='127.0.0.1', port=5000)
+    app.run(debug=False, host="127.0.0.1", port=int(os.getenv("NIQ_PORT", "5000")))
