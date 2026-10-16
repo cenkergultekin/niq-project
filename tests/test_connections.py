@@ -163,3 +163,13 @@ def test_deleting_profile_needs_approval_and_connect_saved_works(api, sqlite_pat
     assert api.delete("/api/connections/yerel").status_code == 409
     assert api.delete("/api/connections/yerel", json={"approved": True}).status_code == 200
     assert api.get("/api/connections").get_json()["data"] == []
+
+
+def test_legacy_sql_server_driver_gets_a_warning_not_a_failure(monkeypatch):
+    import pyodbc
+
+    monkeypatch.setattr(pyodbc, "drivers", lambda: ["SQL Server"])
+    step = diagnostics._check_driver(Profile(type="mssql", host="srv", database="d"))
+    assert step["status"] == "warn" and "ODBC Driver 18" in step["hint"]
+    monkeypatch.setattr(pyodbc, "drivers", lambda: ["ODBC Driver 18 for SQL Server", "SQL Server"])
+    assert diagnostics._check_driver(Profile(type="mssql", host="srv", database="d"))["status"] == "ok"

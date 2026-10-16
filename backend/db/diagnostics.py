@@ -58,6 +58,9 @@ def _check_driver(profile: Profile) -> Dict[str, str]:
             installed = []
         if not installed:
             return _step("driver", "Sürücü", FAIL, "SQL Server ODBC sürücüsü bulunamadı", dialect.install_hint)
+        if driver == "SQL Server":
+            return _step("driver", "Sürücü", WARN, "Windows ile gelen eski 'SQL Server' sürücüsü kullanılıyor",
+                         "Çalışır, ancak yeni TLS ve sunucu özellikleri için Microsoft ODBC Driver 18 kurmanız önerilir: https://aka.ms/odbc18")
         return _step("driver", "Sürücü", OK, driver)
     return _step("driver", "Sürücü", OK, dialect.driver_module)
 

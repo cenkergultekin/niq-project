@@ -48,6 +48,34 @@ def friendly_error(exc: Exception) -> str:
     return " ".join(text_.split())[:300] or "Veritabanı hatası"
 
 
+# SQL Server şema okuma: SQLAlchemy'nin inspector'ı parametreli CAST(? AS NVARCHAR(max)) kullanır ve Windows ile gelen
+# eski "SQL Server" ODBC sürücüsü bunu reddeder (HY104). Parametresiz, tek seferlik ham sorgular her sürücüyle çalışır
+# ve tablo başına sorgu yerine tüm şemayı üç sorguda okur.
+MSSQL_COLUMNS_SQL = """
+SELECT c.TABLE_SCHEMA, c.TABLE_NAME, c.COLUMN_NAME, c.DATA_TYPE, c.CHARACTER_MAXIMUM_LENGTH, c.IS_NULLABLE
+FROM INFORMATION_SCHEMA.COLUMNS c
+JOIN INFORMATION_SCHEMA.TABLES t
+  ON t.TABLE_SCHEMA = c.TABLE_SCHEMA AND t.TABLE_NAME = c.TABLE_NAME AND t.TABLE_TYPE = 'BASE TABLE'
+WHERE c.TABLE_SCHEMA NOT IN ('sys', 'INFORMATION_SCHEMA', 'guest')
+ORDER BY c.TABLE_SCHEMA, c.TABLE_NAME, c.ORDINAL_POSITION
+"""
+MSSQL_PRIMARY_KEYS_SQL = """
+SELECT ku.TABLE_SCHEMA, ku.TABLE_NAME, ku.COLUMN_NAME
+FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE ku
+  ON tc.CONSTRAINT_NAME = ku.CONSTRAINT_NAME AND tc.TABLE_SCHEMA = ku.TABLE_SCHEMA
+WHERE tc.CONSTRAINT_TYPE = 'PRIMARY KEY'
+ORDER BY ku.ORDINAL_POSITION
+"""
+MSSQL_FOREIGN_KEYS_SQL = """
+SELECT OBJECT_SCHEMA_NAME(fkc.parent_object_id), OBJECT_NAME(fkc.parent_object_id), pc.name,
+       OBJECT_SCHEMA_NAME(fkc.referenced_object_id), OBJECT_NAME(fkc.referenced_object_id), rc.name
+FROM sys.foreign_key_columns fkc
+JOIN sys.columns pc ON pc.object_id = fkc.parent_object_id AND pc.column_id = fkc.parent_column_id
+JOIN sys.columns rc ON rc.object_id = fkc.referenced_object_id AND rc.column_id = fkc.referenced_column_id
+"""
+
+
 def apply_query_timeout(db_type: str, dbapi_connection, seconds: int) -> None:
     """Sürücü düzeyinde sorgu zaman aşımı. PostgreSQL/MySQL için SQL ile (`_prepare`), burada diğerleri."""
     if db_type == "mssql":
@@ -193,19 +221,51 @@ class Connector:
                  if s.lower() not in hidden and not s.lower().startswith(("pg_", "db_"))]
         return names or [None]
 
+    def _load_mssql_schema(self) -> Dict[str, TableInfo]:
+        """Tüm şemayı (kolon tipi, PK, FK) üç ham sorguyla okur."""
+        tables: Dict[str, TableInfo] = {}
+        keys: Dict[tuple, str] = {}
+        with self.engine.connect() as conn:
+            for schema, table, column, dtype, length, nullable in conn.exec_driver_sql(MSSQL_COLUMNS_SQL).fetchall():
+                name = display_name(schema, table, self.dialect.default_schema)
+                keys[(schema.lower(), table.lower())] = name
+                type_text = dtype if not length or length < 0 else f"{dtype}({length})"
+                info = tables.setdefault(name, TableInfo(name=name, columns=[]))
+                info.columns.append(ColumnInfo(column, type_text, nullable == "YES"))
+            for schema, table, column in conn.exec_driver_sql(MSSQL_PRIMARY_KEYS_SQL).fetchall():
+                name = keys.get((schema.lower(), table.lower()))
+                if name:
+                    tables[name].primary_key.append(column)
+            try:
+                for ps, pt, pc, rs, rt, rc in conn.exec_driver_sql(MSSQL_FOREIGN_KEYS_SQL).fetchall():
+                    name = keys.get((ps.lower(), pt.lower()))
+                    target = keys.get((rs.lower(), rt.lower()), display_name(rs, rt, self.dialect.default_schema))
+                    if name:
+                        tables[name].foreign_keys.append((pc, target, rc))
+            except Exception as exc:  # sys.* görünümüne yetki yoksa şema yine de çalışır
+                logger.warning("Foreign key bilgisi okunamadı: %s", friendly_error(exc))
+            conn.rollback()
+        return tables
+
     def get_tables(self, refresh: bool = False) -> List[str]:
         with self._lock:
             expired = time.time() - self._table_cache_at > Config.SCHEMA_CACHE_TTL
             if refresh or self._table_cache is None or expired:
                 names: List[str] = []
-                with self.engine.connect() as conn:
-                    inspector = inspect(conn)
-                    for schema in self._schemas(inspector):
-                        for table in inspector.get_table_names(schema=schema):
-                            names.append(display_name(schema, table, self.dialect.default_schema))
+                if self.profile.type == "mssql":
+                    loaded = self._load_mssql_schema()
+                    self._schema_cache = loaded
+                    names = list(loaded)
+                else:
+                    with self.engine.connect() as conn:
+                        inspector = inspect(conn)
+                        for schema in self._schemas(inspector):
+                            for table in inspector.get_table_names(schema=schema):
+                                names.append(display_name(schema, table, self.dialect.default_schema))
                 self._table_cache = sorted(names, key=str.lower)
                 self._table_cache_at = time.time()
-                self._schema_cache.clear()
+                if self.profile.type != "mssql":
+                    self._schema_cache.clear()
             return list(self._table_cache)
 
     def quote_table(self, name: str) -> str:
@@ -227,6 +287,11 @@ class Connector:
         cached = self._schema_cache.get(name)
         if cached:
             return cached
+        if self.profile.type == "mssql":
+            self.get_tables(refresh=True)
+            if name in self._schema_cache:
+                return self._schema_cache[name]
+            raise ValueError(f"Tablo bulunamadı: {name}")
         schema, table = self._split(name)
         with self.engine.connect() as conn:
             inspector = inspect(conn)
