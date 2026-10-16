@@ -10,7 +10,7 @@ import urllib.request
 
 from PySide6.QtCore import QTimer, QUrl
 from PySide6.QtGui import QAction, QDesktopServices
-from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings
+from PySide6.QtWebEngineCore import QWebEnginePage, QWebEnginePermission, QWebEngineSettings
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import QApplication, QMainWindow, QMessageBox
 from waitress.server import create_server
@@ -35,6 +35,15 @@ class LocalOnlyPage(QWebEnginePage):
     def __init__(self, parent, origin: str):
         super().__init__(parent)
         self._origin = origin
+        self.permissionRequested.connect(self._on_permission)
+
+    def _on_permission(self, permission: QWebEnginePermission) -> None:
+        """Mikrofon (bas-konuş) izni yalnızca kendi yerel arayüzümüze verilir; diğer izinler reddedilir."""
+        local = permission.origin().toString().rstrip("/") == self._origin
+        if local and permission.permissionType() == QWebEnginePermission.PermissionType.MediaAudioCapture:
+            permission.grant()
+        else:
+            permission.deny()
 
     def acceptNavigationRequest(self, url, nav_type, is_main_frame):
         if is_main_frame and not url.toString().startswith(self._origin):
