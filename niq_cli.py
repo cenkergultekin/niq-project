@@ -40,8 +40,10 @@ from backend.db.profiles import (
 from backend.db.tunnel import HostKeyUnknown
 from backend.services.ai_service import AIService, AIServiceError, AIUnavailableError
 from backend.services.history import HistoryStore
+from backend.services.jobs import JobStore, Scheduler, run_job, wait_forever
 from backend.services.knowledge import KnowledgeStore
 from backend.services.query_service import run_question, run_sql
+from backend.services.schedule import parse_schedule
 
 EXIT_OK, EXIT_ERROR, EXIT_USAGE, EXIT_APPROVAL = 0, 1, 2, 3
 
@@ -239,6 +241,74 @@ def cmd_ask(args, store):
         connector.close()
 
 
+def _alert_condition(text: Optional[str], column: Optional[str]) -> Optional[Dict[str, Any]]:
+    """'rows>0', '>5', '<=0.2' gibi metni koşula çevirir."""
+    if not text:
+        return None
+    text = text.strip().replace(" ", "")
+    if text in ("rows>0", "rows==0"):
+        return {"op": text}
+    for op in (">=", "<=", "==", "!=", ">", "<"):
+        if text.startswith(op):
+            try:
+                condition: Dict[str, Any] = {"op": op, "value": float(text[len(op):])}
+            except ValueError:
+                break
+            if column:
+                condition["column"] = column
+            return condition
+    raise CliError("--alert biçimi: rows>0, rows==0 veya >5, <=0.2 gibi bir karşılaştırma", EXIT_USAGE)
+
+
+def cmd_jobs(args, store):
+    jobs = JobStore()
+    if args.action == "list":
+        return {"success": True, "data": jobs.list()}
+    if args.action == "runs":
+        return {"success": True, "data": jobs.runs(limit=20, job_id=args.target and int(args.target))}
+    if args.action in ("run", "delete"):
+        if not args.target or not args.target.isdigit():
+            raise CliError("İş numarasını verin.", EXIT_USAGE)
+        job = jobs.get(int(args.target))
+        if not job:
+            raise CliError(f"İş bulunamadı: {args.target}")
+        if args.action == "delete":
+            require_approval({"approved": args.yes}, "delete_job", job["name"])
+            jobs.delete(job["id"])
+            return {"success": True, "message": "İş silindi."}
+        return {"success": True, "data": run_job(job, jobs, store)}
+    if args.action == "run-due":
+        return {"success": True, "data": Scheduler(jobs, store).tick()}
+    if args.action == "serve":
+        wait_forever(Scheduler(jobs, store))
+        return {"success": True}
+    # add
+    if not args.connection:
+        raise CliError("Zamanlanacak iş için kayıtlı bir profil gerekir: --connection ad", EXIT_USAGE)
+    schedule = parse_schedule(args.schedule or "")
+    if not schedule:
+        raise CliError("--schedule anlaşılamadı. Örnek: \"her pazartesi 09:00\", \"her gün 08:30\", \"her 30 dakikada\"", EXIT_USAGE)
+    condition = _alert_condition(args.alert, args.column)
+    connector = open_connector(args, store)
+    try:
+        sql = args.sql
+        if not sql:
+            if not args.question:
+                raise CliError("--question veya --sql verin.", EXIT_USAGE)
+            payload, _ = run_question(connector, AIService(), HistoryStore(), KnowledgeStore(), args.question, None)
+            if not payload.get("success"):
+                raise CliError(payload.get("error", "Soru çalışmadı"))
+            sql = payload["sql"]
+        require_approval({"approved": args.yes}, "create_schedule", args.name or args.question or sql[:40])
+        job_id = jobs.create(
+            name=args.name or (args.question or "Rapor")[:60], kind="alert" if condition else "report",
+            profile_id=connector.profile.id, question=args.question or "", sql=sql, schedule=schedule,
+            condition=condition, channels=[c for c in (args.channels or "inbox").split(",") if c])
+        return {"success": True, "data": jobs.get(job_id), "sql": sql}
+    finally:
+        connector.close()
+
+
 def cmd_ai(args, store):
     config = Settings.ai_config()
     status = {"provider": config["provider"], "model": config["model"], "has_key": bool(config["api_key"]),
@@ -296,6 +366,18 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("question")
     p.add_argument("--tables", help="virgülle ayrılmış tablolar (boşsa otomatik seçilir)")
     p.set_defaults(func=cmd_ask)
+
+    p = sub.add_parser("jobs", help="zamanlanmış rapor ve uyarılar (list, add, run, run-due, serve, delete, runs)")
+    p.add_argument("action", choices=["list", "add", "run", "run-due", "serve", "delete", "runs"])
+    p.add_argument("target", nargs="?", help="run/delete/runs için iş numarası")
+    add_profile_args(p)
+    p.add_argument("--question", help="add: zamanlanacak soru (SQL AI ile üretilir)")
+    p.add_argument("--sql", help="add: doğrudan SELECT (AI kullanılmaz)")
+    p.add_argument("--schedule", help="add: 'her pazartesi 09:00', 'her gün 08:30', 'her 30 dakikada'")
+    p.add_argument("--alert", help="add: koşul (rows>0, >5, <=0.2); verilirse iş uyarı olur")
+    p.add_argument("--column", help="add: koşulun uygulanacağı kolon (boşsa ilk sayısal değer)")
+    p.add_argument("--channels", help="add: inbox,telegram,webhook (virgülle)")
+    p.set_defaults(func=cmd_jobs)
 
     p = sub.add_parser("ai", help="AI sağlayıcı durumu / test")
     p.add_argument("action", choices=["status", "test"], nargs="?", default="status")

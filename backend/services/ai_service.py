@@ -58,6 +58,42 @@ TABLES_SCHEMA = {
     },
 }
 
+_NULLABLE_INT = {"type": ["integer", "null"]}
+_NULLABLE_STR = {"type": ["string", "null"]}
+_NULLABLE_NUM = {"type": ["number", "null"]}
+
+JOB_SCHEMA = {
+    "name": "job_plan",
+    "strict": True,
+    "schema": {
+        "type": "object",
+        "properties": {
+            "name": {"type": "string"},
+            "kind": {"type": "string", "enum": ["report", "alert"]},
+            "question": {"type": "string"},
+            "schedule": {
+                "type": "object",
+                "properties": {
+                    "kind": {"type": "string", "enum": ["interval", "daily", "weekly", "monthly"]},
+                    "minutes": _NULLABLE_INT, "time": _NULLABLE_STR, "day": _NULLABLE_INT,
+                },
+                "required": ["kind", "minutes", "time", "day"], "additionalProperties": False,
+            },
+            "condition": {
+                "type": ["object", "null"],
+                "properties": {
+                    "op": {"type": "string", "enum": [">", "<", ">=", "<=", "==", "!=", "rows>0", "rows==0"]},
+                    "value": _NULLABLE_NUM, "column": _NULLABLE_STR,
+                },
+                "required": ["op", "value", "column"], "additionalProperties": False,
+            },
+            "channels": {"type": "array", "items": {"type": "string", "enum": ["inbox", "telegram", "webhook"]}},
+        },
+        "required": ["name", "kind", "question", "schedule", "condition", "channels"],
+        "additionalProperties": False,
+    },
+}
+
 SYSTEM_PROMPT = """You are an expert {sql_name} analyst. Convert the user's question into ONE read-only query.
 
 Rules:
@@ -213,6 +249,26 @@ class AIService:
         parsed = parse_sql_answer(raw)
         logger.info("SQL üretildi (%.1fs, model=%s)", time.time() - started, self.model)
         return parsed
+
+    def plan_job(self, text: str, now_iso: str) -> Dict[str, Any]:
+        """Doğal dil isteğinden zamanlanmış rapor/uyarı planı çıkarır."""
+        prompt = (
+            "Turn the user's request into a scheduled job. Respond as JSON.\n"
+            "- kind: 'report' (send results on a schedule) or 'alert' (notify only when a condition holds).\n"
+            "- question: a standalone question for a database analyst. For an alert it must ask for ONE metric value "
+            "(e.g. 'iade oranı yüzdesi'), so the condition can compare the first numeric value.\n"
+            "- schedule: interval (minutes), daily (time HH:MM), weekly (day 0=Monday..6=Sunday, time) or monthly "
+            "(day 1-28, time). Alerts without a stated schedule: daily 09:00. Reports without a time: 09:00.\n"
+            "- condition: for alerts, op and value (null for rows>0 / rows==0); null for reports.\n"
+            "- channels: include 'telegram' if the user mentions Telegram, 'webhook' if a webhook; otherwise ['inbox'].\n"
+            "- name: short Turkish title.\n"
+            f"Current local time: {now_iso}\n\nRequest: {text}"
+        )
+        raw = self._complete([{"role": "user", "content": prompt}], JOB_SCHEMA)
+        data = _extract_json(raw)
+        if not data:
+            raise AIServiceError("İstek anlaşılamadı")
+        return data
 
     def pick_tables(self, question: str, catalog: List[str], limit: int = 6) -> List[str]:
         """Çok tablolu şemalarda soruyla ilgili tabloları seçer (yalnızca adlar ve notlar gider)."""

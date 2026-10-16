@@ -4,9 +4,10 @@ HTTP API: bağlantı, tablolar, doğal dil sorgusu, geçmiş, ayarlar ve sağlı
 import logging
 import threading
 from dataclasses import asdict
+from datetime import datetime
 from typing import Any, Dict, Optional, Tuple
 
-from flask import Blueprint, jsonify, request, session
+from flask import Blueprint, Response, jsonify, request, session
 from werkzeug.exceptions import HTTPException
 
 from backend.config.config import PROVIDERS, Config, Settings
@@ -29,13 +30,15 @@ from backend.db.profiles import (
     set_ssh_secret,
 )
 from backend.db.tunnel import HostKeyUnknown
-from backend.services import models_catalog
+from backend.services import exporter, models_catalog, notify
 from backend.services.ai_service import AIService, AIServiceError, AIUnavailableError
 from backend.services.analyst import is_analytical, run_analysis
 from backend.services.history import HistoryStore
+from backend.services.jobs import JobStore, run_job
 from backend.services.knowledge import KnowledgeStore
 from backend.services.profiler import profile_database
 from backend.services.query_service import ConversationStore, run_question, suggest_tables
+from backend.services.schedule import parse_schedule, validate_schedule
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +58,13 @@ class AppState:
         self._history: Optional[HistoryStore] = None
         self._knowledge: Optional[KnowledgeStore] = None
         self.conversations = ConversationStore()
+        self._jobs: Optional[JobStore] = None
+
+    @property
+    def jobs(self) -> JobStore:
+        if self._jobs is None:
+            self._jobs = JobStore()
+        return self._jobs
 
     @property
     def knowledge(self) -> KnowledgeStore:
@@ -470,6 +480,183 @@ def edit_query(query_id: int):
         return jsonify({**fail(response.error or "Sorgu çalışmadı"), "sql": guard.sql}), 400
     return jsonify({"success": True, "sql": guard.sql, "results": response.results, "row_count": len(response.results),
                     "truncated": response.truncated, "verified": True, "query_id": query_id})
+
+
+# --- dışa aktarma ---------------------------------------------------------------------
+@api_bp.route("/export", methods=["POST"])
+def export_results():
+    """Kayıtlı sorguyu (query_id) ya da verilen SQL'i yeniden çalıştırıp CSV/XLSX olarak indirir."""
+    data = _body()
+    connector = state.manager()
+    fmt = str(data.get("format", "csv")).lower()
+    if fmt not in ("csv", "xlsx"):
+        raise ValidationError("Biçim csv veya xlsx olmalı")
+    sql = str(data.get("sql", "")).strip()
+    if data.get("query_id"):
+        saved = state.history.get(connector.db_key, int(data["query_id"]))
+        if not saved:
+            return jsonify(fail("Sorgu bulunamadı.")), 404
+        sql = saved.sql_query
+    if not sql:
+        raise ValidationError("SQL veya query_id gerekli")
+    guard = validate_sql(sql, allowed_tables=connector.get_tables(), dialect_id=connector.dialect.id,
+                         database=connector.profile.database)
+    if not guard.ok:
+        raise ValidationError(guard.error or "SQL geçersiz")
+    response = connector.execute_readonly(guard.sql, 10000)
+    if not response.is_successful:
+        return jsonify(fail(response.error or "Sorgu çalışmadı")), 400
+    rows = response.results or []
+    if fmt == "xlsx":
+        body, mime = exporter.to_xlsx(rows), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    else:
+        body, mime = exporter.to_csv(rows), "text/csv; charset=utf-8"
+    return Response(body, mimetype=mime, headers={"Content-Disposition": f"attachment; filename=niq-sonuc.{fmt}"})
+
+
+# --- zamanlanmış rapor ve uyarılar ------------------------------------------------------
+def _profile_id_for_jobs() -> str:
+    """İşler oturumsuz çalışır: bağlantı profili kayıtlı olmalı (parola keyring'den okunur)."""
+    profile = state.manager().profile
+    if not state.profiles.get(profile.id):
+        raise ValidationError("Zamanlamak için bağlantı profilini önce kaydedin (Bağlantılar > Profili Kaydet).")
+    return profile.id
+
+
+@api_bp.route("/jobs/plan", methods=["POST"])
+def plan_job():
+    """'Her pazartesi 9'da haftalık satışı gönder' / 'iade oranı %5'i geçerse haber ver' -> önizlemeli plan (kaydetmez)."""
+    text = StringUtils.sanitize_input(str(_body().get("text", "")), 500)
+    if not text:
+        raise ValidationError("İstek metni gerekli")
+    connector = state.manager()
+    try:
+        plan = state.ai_service.ai_available and state.ai_service.plan_job(text, datetime.now().strftime("%Y-%m-%d %H:%M %A"))
+    except AIUnavailableError as exc:
+        return jsonify(fail(str(exc), "AI_UNAVAILABLE")), 503
+    except AIServiceError as exc:
+        return jsonify(fail(str(exc), "AI_ERROR")), 502
+    if not plan:
+        return jsonify(fail("AI için API anahtarı gerekli (Ayarlar).", "AI_UNAVAILABLE")), 503
+
+    schedule = {k: v for k, v in plan["schedule"].items() if v is not None}
+    try:
+        schedule = validate_schedule(schedule)
+    except (ValueError, KeyError):
+        schedule = parse_schedule(text) or {"kind": "daily", "time": "09:00"}
+    payload, status = run_question(connector, state.ai_service, state.history, state.knowledge,
+                                   StringUtils.sanitize_input(plan["question"], Config.MAX_QUERY_LENGTH))
+    if status != 200:
+        return jsonify({**fail(payload.get("error", "Soru çalışmadı")), "plan": plan}), 400
+    condition = plan.get("condition")
+    if condition:
+        condition = {k: v for k, v in condition.items() if v is not None}
+    from backend.services.schedule import describe_condition, describe_schedule
+    return jsonify(ok({
+        "name": plan["name"], "kind": plan["kind"], "question": plan["question"], "sql": payload["sql"],
+        "schedule": schedule, "schedule_text": describe_schedule(schedule),
+        "condition": condition or None, "condition_text": describe_condition(condition) if condition else "",
+        "channels": plan.get("channels") or ["inbox"], "preview": (payload.get("results") or [])[:10],
+        "row_count": payload.get("row_count", 0),
+    }))
+
+
+@api_bp.route("/jobs", methods=["GET"])
+def list_jobs():
+    return jsonify(ok(state.jobs.list()))
+
+
+@api_bp.route("/jobs", methods=["POST"])
+def create_job():
+    """KRİTİK: standing otomasyon oluşturur (onay gerekir)."""
+    data = _body()
+    connector = state.manager()
+    require_approval(data, "create_schedule", f"{data.get('name', '')}")
+    guard = validate_sql(str(data.get("sql", "")), allowed_tables=connector.get_tables(), dialect_id=connector.dialect.id,
+                         database=connector.profile.database)
+    if not guard.ok:
+        raise ValidationError(guard.error or "SQL geçersiz")
+    try:
+        job_id = state.jobs.create(
+            name=str(data.get("name", "")), kind=str(data.get("kind", "report")), profile_id=_profile_id_for_jobs(),
+            question=str(data.get("question", "")), sql=guard.sql, schedule=data.get("schedule") or {},
+            condition=data.get("condition"), channels=data.get("channels") or ["inbox"])
+    except (ValueError, KeyError, TypeError) as exc:
+        raise ValidationError(str(exc)) from exc
+    return jsonify(ok(state.jobs.get(job_id), "Zamanlandı."))
+
+
+@api_bp.route("/jobs/<int:job_id>", methods=["DELETE"])
+def delete_job(job_id: int):
+    """KRİTİK: işi siler (onay gerekir)."""
+    job = state.jobs.get(job_id)
+    if not job:
+        return jsonify(fail("İş bulunamadı.")), 404
+    require_approval(request.get_json(silent=True) or {}, "delete_job", job["name"])
+    state.jobs.delete(job_id)
+    return jsonify(ok(None, "Silindi."))
+
+
+@api_bp.route("/jobs/<int:job_id>/toggle", methods=["POST"])
+def toggle_job(job_id: int):
+    enabled = bool((request.get_json(silent=True) or {}).get("enabled", True))
+    if not state.jobs.set_enabled(job_id, enabled):
+        return jsonify(fail("İş bulunamadı.")), 404
+    return jsonify(ok({"enabled": enabled}))
+
+
+@api_bp.route("/jobs/<int:job_id>/run", methods=["POST"])
+def run_job_now(job_id: int):
+    """Şimdi çalıştır (onaysız: kullanıcı kendi eylemi)."""
+    job = state.jobs.get(job_id)
+    if not job:
+        return jsonify(fail("İş bulunamadı.")), 404
+    return jsonify(ok(run_job(job, state.jobs, state.profiles)))
+
+
+@api_bp.route("/inbox", methods=["GET"])
+def inbox():
+    """Son çalışmalar (rapor sonuçları ve uyarılar)."""
+    job_id = request.args.get("job_id", type=int)
+    return jsonify(ok(state.jobs.runs(limit=min(request.args.get("limit", 30, type=int), 100), job_id=job_id)))
+
+
+# --- bildirim kanalları -----------------------------------------------------------------
+@api_bp.route("/notify", methods=["GET"])
+def get_notify():
+    config = Settings.load()["notify"]
+    return jsonify(ok({"telegram_chat_id": config["telegram_chat_id"], "webhook_url": config["webhook_url"],
+                       "telegram_has_token": bool(notify.get_telegram_token())}))
+
+
+@api_bp.route("/notify", methods=["POST"])
+def set_notify():
+    """KRİTİK: sonuç verilerinin gideceği kanalı ayarlar (onay gerekir)."""
+    data = _body()
+    require_approval(data, "configure_notifications")
+    updates: Dict[str, Any] = {}
+    if "telegram_chat_id" in data:
+        updates["telegram_chat_id"] = str(data["telegram_chat_id"]).strip()
+    if "webhook_url" in data:
+        url = str(data["webhook_url"]).strip()
+        if url and not url.startswith(("http://", "https://")):
+            raise ValidationError("Webhook adresi http:// veya https:// ile başlamalı")
+        updates["webhook_url"] = url
+    if updates:
+        Settings.save({"notify": updates})
+    if data.get("telegram_token"):
+        notify.set_telegram_token(str(data["telegram_token"]).strip())
+    if data.get("clear_telegram_token"):
+        notify.delete_telegram_token()
+    return get_notify()
+
+
+@api_bp.route("/notify/test", methods=["POST"])
+def test_notify():
+    channels = [c for c in (_body().get("channels") or []) if c in ("telegram", "webhook")]
+    if not channels:
+        raise ValidationError("Test için telegram veya webhook seçin")
+    return jsonify(ok(notify.notify(channels, "NIQ test", "Bildirim kanalı çalışıyor.")))
 
 
 # --- ayarlar ------------------------------------------------------------------

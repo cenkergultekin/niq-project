@@ -17,6 +17,9 @@ openai>=2.3.0
 requests>=2.31.0
 python-dotenv>=1.0.0
 
+# Excel dışa aktarma
+openpyxl>=3.1
+
 # SQL doğrulama (AST)
 sqlglot>=25.0
 
