@@ -57,6 +57,6 @@ python main_desktop.py   # masaüstü uygulaması
 python app.py            # yalnızca web arayüzü
 ```
 
-Kod haritası: `backend/db/` (türler, profiller, bağlayıcı, teşhis), `backend/core/sql_guard.py` (AST doğrulama), `backend/core/approval.py` (kritik adım onayı), `backend/services/` (AI, sorgu akışı, geçmiş), `backend/routes/routes.py` (HTTP API), `niq_cli.py` (agent arayüzü).
+Kod haritası: `backend/db/` (türler, profiller, bağlayıcı, teşhis, SSH tüneli), `backend/services/` (AI, sorgu akışı, analiz agent'ı, bilgi katmanı, zamanlanmış işler, bildirim, dışa aktarma, hazır sorular), `frontend/static/js/` (core, voice, connect, chat, views), `niq_mcp.py` (MCP), `backend/core/sql_guard.py` (AST doğrulama), `backend/core/approval.py` (kritik adım onayı), `backend/routes/routes.py` (HTTP API), `niq_cli.py` (agent arayüzü).
 
 Yeni kritik bir adım eklerken `approval.CRITICAL_ACTIONS`'a kaydet, API'de `require_approval(...)`, CLI'da `--yes` ile bağla ve test yaz. Anahtarlar, parolalar ve `.env` repoya girmez.

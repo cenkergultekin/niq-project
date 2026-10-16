@@ -27,8 +27,10 @@ SQL_SCHEMA = {
         "properties": {
             "sql": {"type": "string", "description": "Tek bir T-SQL SELECT sorgusu"},
             "explanation": {"type": "string", "description": "Sorgunun ne yaptığı, 1-2 cümle Türkçe"},
+            "follow_ups": {"type": "array", "items": {"type": "string"},
+                           "description": "Kullanıcının sıradaki olası 2-3 kısa takip sorusu (Türkçe)"},
         },
-        "required": ["sql", "explanation"],
+        "required": ["sql", "explanation", "follow_ups"],
         "additionalProperties": False,
     },
 }
@@ -94,6 +96,17 @@ JOB_SCHEMA = {
     },
 }
 
+SUGGEST_SCHEMA = {
+    "name": "suggestions",
+    "strict": True,
+    "schema": {
+        "type": "object",
+        "properties": {"questions": {"type": "array", "items": {"type": "string"}}},
+        "required": ["questions"],
+        "additionalProperties": False,
+    },
+}
+
 SYSTEM_PROMPT = """You are an expert {sql_name} analyst. Convert the user's question into ONE read-only query.
 
 Rules:
@@ -105,7 +118,8 @@ Rules:
 - If the question cannot be answered with the given schema, return the closest reasonable query and say so in the explanation.
 - Earlier turns of this conversation may follow. When the new message is a follow-up ("bunu ülkeye göre kır", "sadece Almanya",
   "geçen yılla karşılaştır", "ilk 5"), modify the previous query accordingly instead of starting over.
-- Respond as JSON: {"sql": "...", "explanation": "..."}; the explanation is 1-2 sentences in Turkish.
+- Respond as JSON: {"sql": "...", "explanation": "...", "follow_ups": ["...", "..."]}; the explanation is 1-2 sentences in Turkish;
+  follow_ups are 2-3 short, natural next questions the user might ask about this result, in Turkish.
 
 Database schema:
 {schema}
@@ -270,6 +284,18 @@ class AIService:
             raise AIServiceError("İstek anlaşılamadı")
         return data
 
+    def suggest_questions(self, catalog: str, count: int = 6) -> List[str]:
+        """Şemaya bakıp bir iş kullanıcısının sorabileceği hazır soruları üretir."""
+        prompt = (
+            f"Below is a database catalog. Write {count} useful business questions a non-technical user could ask about this "
+            "data, in Turkish, each under 12 words, answerable with SQL (counts, totals, top-N, trends, comparisons). "
+            'Vary them. Respond as JSON: {"questions": ["..."]}.\n\n' + catalog
+        )
+        raw = self._complete([{"role": "user", "content": prompt}], SUGGEST_SCHEMA, temperature=0.5)
+        data = _extract_json(raw) or {}
+        questions = data.get("questions") if isinstance(data.get("questions"), list) else []
+        return [str(q).strip() for q in questions if str(q).strip()][:count]
+
     def pick_tables(self, question: str, catalog: List[str], limit: int = 6) -> List[str]:
         """Çok tablolu şemalarda soruyla ilgili tabloları seçer (yalnızca adlar ve notlar gider)."""
         prompt = (
@@ -397,7 +423,11 @@ def parse_sql_answer(raw: str) -> Dict[str, str]:
     """Model cevabından {sql, explanation} çıkarır: JSON, kod çiti ya da çıplak SQL."""
     data = _extract_json(raw)
     if data and isinstance(data.get("sql"), str) and data["sql"].strip():
-        return {"sql": data["sql"].strip(), "explanation": str(data.get("explanation", "")).strip()}
+        parsed = {"sql": data["sql"].strip(), "explanation": str(data.get("explanation", "")).strip()}
+        follow_ups = [str(q).strip() for q in data.get("follow_ups", []) if str(q).strip()][:3]
+        if follow_ups:
+            parsed["follow_ups"] = follow_ups
+        return parsed
     fenced = re.search(r"```(?:sql)?\s*(.*?)```", raw, re.DOTALL | re.IGNORECASE)
     sql = (fenced.group(1) if fenced else raw).strip()
     if not sql:

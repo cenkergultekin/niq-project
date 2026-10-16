@@ -28,4 +28,4 @@ sqlglot>=25.0
 
 # Masaüstü arayüz
 PySide6-Essentials>=6.7
-PySide6-Addons>=6.7        # Qt WebEngine (Essentials içinde yok)
+PySide6-WebEngine>=6.7     # Qt WebEngine (Essentials ve Addons içinde yok)

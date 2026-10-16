@@ -39,6 +39,7 @@ from backend.services.knowledge import KnowledgeStore
 from backend.services.profiler import profile_database
 from backend.services.query_service import ConversationStore, run_question, suggest_tables
 from backend.services.schedule import parse_schedule, validate_schedule
+from backend.services.suggestions import build_suggestions
 
 logger = logging.getLogger(__name__)
 
@@ -291,6 +292,17 @@ def save_connection():
     return jsonify(ok(profile.public(), "Bağlantı profili kaydedildi."))
 
 
+@api_bp.route("/connections/current", methods=["POST"])
+def save_current_connection():
+    """KRİTİK: şu an bağlı (kayıtsız) bağlantıyı profil olarak saklar. Parolası zaten güvenli depoda olduğu için yeniden girilmez."""
+    data = _body()
+    profile = state.manager().profile
+    require_approval(data, "save_connection", f"{profile.name} ({profile.user or 'kullanıcısız'})")
+    if not state.profiles.get(profile.id):
+        state.profiles.save(profile)
+    return jsonify(ok(profile.public(), "Bağlantı profili kaydedildi."))
+
+
 @api_bp.route("/connections/<ref>", methods=["DELETE"])
 def delete_connection(ref: str):
     """KRİTİK: profili ve kayıtlı parolasını siler (onay gerekir)."""
@@ -326,6 +338,13 @@ def get_columns():
         raise ValidationError(f"En fazla {Config.MAX_TABLES_PER_QUERY} tablo seçilebilir")
     tables = [StringUtils.sanitize_input(t) for t in tables]
     return jsonify(ok(state.manager().get_multiple_table_columns(tables)))
+
+
+@api_bp.route("/suggestions", methods=["GET"])
+def get_suggestions():
+    """Bağlanınca gösterilen hazır sorular (AI varsa şemadan üretilir, yoksa şema tabanlı genel sorular; önbelleklenir)."""
+    return jsonify(ok(build_suggestions(state.manager(), state.ai_service, state.knowledge,
+                                        refresh=request.args.get("refresh") == "1")))
 
 
 @api_bp.route("/suggest_tables", methods=["POST"])
@@ -773,7 +792,10 @@ def test_ai():
 @api_bp.route("/health", methods=["GET"])
 def health_check():
     ai = state.ai_service
+    session_profile = session.get("PROFILE")
+    current = state.connector.profile if state.connector else (Profile.from_dict(session_profile) if session_profile else None)
     return jsonify(ok({
+        "profile": current.public() if current else None,
         "status": "healthy",
         "database_connected": bool(state.connector or session.get("PROFILE")),
         "ai_service_available": ai.ai_available,

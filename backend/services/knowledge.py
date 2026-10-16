@@ -48,6 +48,8 @@ class KnowledgeStore:
                 CREATE TABLE IF NOT EXISTS table_notes (
                     db_key TEXT NOT NULL, table_name TEXT NOT NULL, note TEXT NOT NULL,
                     auto INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (db_key, table_name));
+                CREATE TABLE IF NOT EXISTS suggestions (
+                    db_key TEXT PRIMARY KEY, questions_json TEXT NOT NULL, source TEXT NOT NULL, updated_at REAL NOT NULL);
                 CREATE TABLE IF NOT EXISTS value_profiles (
                     db_key TEXT NOT NULL, table_name TEXT NOT NULL, column_name TEXT NOT NULL,
                     values_json TEXT NOT NULL, updated_at REAL NOT NULL,
@@ -130,6 +132,19 @@ class KnowledgeStore:
         with self._connect() as conn:
             return conn.execute("SELECT COUNT(DISTINCT table_name) FROM value_profiles WHERE db_key = ?",
                                 (db_key,)).fetchone()[0]
+
+    # --- hazır sorular önbelleği ---------------------------------------------
+    def get_suggestions(self, db_key: str, max_age_hours: float = 24.0) -> Optional[Dict[str, Any]]:
+        with self._connect() as conn:
+            row = conn.execute("SELECT questions_json, source, updated_at FROM suggestions WHERE db_key = ?", (db_key,)).fetchone()
+        if not row or time.time() - row["updated_at"] > max_age_hours * 3600:
+            return None
+        return {"questions": json.loads(row["questions_json"]), "source": row["source"]}
+
+    def save_suggestions(self, db_key: str, questions: List[str], source: str) -> None:
+        with self._lock, self._connect() as conn:
+            conn.execute("INSERT OR REPLACE INTO suggestions VALUES (?,?,?,?)",
+                         (db_key, json.dumps(questions, ensure_ascii=False), source, time.time()))
 
     # --- AI istemi için bağlam ---------------------------------------------
     def relevant_terms(self, db_key: str, question: str, limit: int = 20) -> List[Dict[str, Any]]:

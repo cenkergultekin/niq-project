@@ -80,8 +80,9 @@ class Profile:
         return bool(self.options.get("ssh_host"))
 
     def default_name(self) -> str:
-        where = self.database if DIALECTS[self.type].file_based else f"{self.host or 'localhost'}/{self.database}"
-        return f"{DIALECTS[self.type].label}: {where}".strip(": /")
+        if DIALECTS[self.type].file_based:
+            return re.split(r"[\\/]", self.database.rstrip("\\/"))[-1] or DIALECTS[self.type].label
+        return f"{DIALECTS[self.type].label}: {self.host or 'localhost'}/{self.database}".strip(": /")
 
     @property
     def key(self) -> str:
