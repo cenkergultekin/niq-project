@@ -162,8 +162,9 @@ def test_missing_profile_is_recorded_as_error(env):
 def test_scheduler_runs_only_due_jobs_and_reschedules(env):
     due = make_job(env, name="vadesi gelen", kind="report", condition=None, sql="SELECT 1 AS x FROM orders",
                    schedule={"kind": "interval", "minutes": 60})
+    later = (datetime.now() + timedelta(hours=6)).strftime("%H:%M")  # günün saatine bağlı olmasın
     far = make_job(env, name="vadesi gelmeyen", kind="report", condition=None, sql="SELECT 1 AS x FROM orders",
-                   schedule={"kind": "daily", "time": "03:00"})
+                   schedule={"kind": "daily", "time": later})
     disabled = make_job(env, name="kapalı", kind="report", condition=None, sql="SELECT 1 AS x FROM orders",
                         schedule={"kind": "interval", "minutes": 5})
     env["store"].set_enabled(disabled["id"], False)
