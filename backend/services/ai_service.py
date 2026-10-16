@@ -155,11 +155,14 @@ class AIService:
         previous_sql: Optional[str] = None,
         previous_error: Optional[str] = None,
         dialect: Optional[Dialect] = None,
+        context: str = "",
     ) -> Dict[str, str]:
         """Soruyu SQL'e çevirir. previous_* verilirse hata düzeltme turudur."""
         dialect = dialect or get_dialect("mssql")
         system = (SYSTEM_PROMPT.replace("{sql_name}", dialect.sql_name).replace("{quoting}", dialect.quoting)
                   .replace("{schema}", format_schema(schema)))
+        if context:
+            system += "\nBusiness knowledge:\n" + context + "\n"
         messages: List[Dict[str, str]] = [{"role": "system", "content": system}]
         for example in examples or []:
             messages.append({"role": "user", "content": example.question})

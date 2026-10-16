@@ -31,7 +31,8 @@ class FakeAI:
         self.answers = list(answers)
         self.calls = []
 
-    def generate_sql(self, question, schema, examples=None, previous_sql=None, previous_error=None, dialect=None):
+    def generate_sql(self, question, schema, examples=None, previous_sql=None, previous_error=None, dialect=None,
+                     context=""):
         self.calls.append((previous_sql, previous_error, dialect.id if dialect else None))
         return {"sql": self.answers.pop(0), "explanation": "açıklama"}
 
@@ -43,6 +44,8 @@ class FakeAI:
 def wired(client, sample_db, monkeypatch):
     monkeypatch.setattr(routes.state, "connector", None)
     monkeypatch.setattr(routes.state, "_history", routes.HistoryStore())
+    monkeypatch.setattr(routes.state, "_knowledge", routes.KnowledgeStore())
+    monkeypatch.setattr(routes.state, "_profile_in_background", lambda profile: None)
     monkeypatch.setattr(routes.state, "profiles", routes.ProfileStore())
     response = client.post("/api/set_db", json={"type": "sqlite", "database": sample_db})
     assert response.status_code == 200, response.get_json()

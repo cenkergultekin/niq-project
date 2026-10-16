@@ -40,6 +40,7 @@ from backend.db.profiles import (
 from backend.db.tunnel import HostKeyUnknown
 from backend.services.ai_service import AIService, AIServiceError, AIUnavailableError
 from backend.services.history import HistoryStore
+from backend.services.knowledge import KnowledgeStore
 from backend.services.query_service import run_question, run_sql, suggest_tables
 
 EXIT_OK, EXIT_ERROR, EXIT_USAGE, EXIT_APPROVAL = 0, 1, 2, 3
@@ -232,7 +233,7 @@ def cmd_ask(args, store):
         tables = [t.strip() for t in args.tables.split(",")] if args.tables else suggest_tables(connector, history, args.question)
         if not tables:
             raise CliError("Soruyla eşleşen tablo bulunamadı. --tables ile belirtin.", extra={"tables": connector.get_tables()[:50]})
-        payload, _ = run_question(connector, AIService(), history, args.question, tables)
+        payload, _ = run_question(connector, AIService(), history, KnowledgeStore(), args.question, tables)
         payload["tables_used"] = tables
         return payload
     except (AIUnavailableError, AIServiceError) as exc:

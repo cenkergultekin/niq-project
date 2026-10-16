@@ -104,6 +104,8 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     "row_limit": 1000,
     # Sonuç satırlarını AI'a gönderip yorum üretme: varsayılan kapalı (veri gizliliği)
     "ai_analysis": False,
+    # Az çeşitlilikli kolonların örnek değerlerini (durum kodları, ülkeler) AI istemine ekleme
+    "ai_value_samples": False,
     # ODBC Driver 18 varsayılan olarak şifreler; yerel/öz imzalı sertifika için
     "trust_server_cert": True,
 }

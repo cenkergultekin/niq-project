@@ -72,6 +72,7 @@ class SavedQuery:
     error_message: Optional[str] = None
     query_results: Optional[List[Dict[str, Any]]] = None
     result_message: Optional[str] = None
+    verified: bool = False
 
     def __post_init__(self):
         if self.created_at is None:
@@ -88,5 +89,6 @@ class SavedQuery:
             "error_message": self.error_message,
             "query_results": self.query_results,
             "result_message": self.result_message,
+            "verified": self.verified,
             "is_scheduled": False,
         }
