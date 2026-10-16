@@ -114,26 +114,27 @@ class AIService:
         return self.config.get("model", "")
 
     # --- çağrı ------------------------------------------------------------
-    def _complete(self, messages: List[Dict[str, str]], schema: Optional[Dict[str, Any]],
-                  max_tokens: Optional[int] = None, temperature: float = 0.0) -> str:
-        """Tek bir sohbet tamamlama. Şema/temperature desteklenmezse sırayla geri çekilir."""
+    def _build_params(self, messages: List[Dict[str, Any]], schema: Optional[Dict[str, Any]], max_tokens: Optional[int],
+                      temperature: float, tools: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         if not self.client:
             raise AIUnavailableError("AI için API anahtarı ayarlanmamış. Ayarlar sayfasından ekleyin.")
-
         limit = max_tokens or self.config["max_output_tokens"]
         # Yerel sunucular eski max_tokens adını bekler; OpenAI/OpenRouter için doğru alan max_completion_tokens
         limit_key = "max_tokens" if self.config["provider"] == "local" else "max_completion_tokens"
         params: Dict[str, Any] = {"model": self.config["model"], "messages": messages, limit_key: limit}
-        use_temperature = not _NO_TEMPERATURE.search(self.config["model"])
-        if use_temperature:
+        if not _NO_TEMPERATURE.search(self.config["model"]):
             params["temperature"] = temperature
         if schema:
             params["response_format"] = {"type": "json_schema", "json_schema": schema}
+        if tools:
+            params["tools"] = tools
+        return params
 
+    def _send(self, params: Dict[str, Any]):
+        """İstek gönderir. Şema/temperature desteklenmezse parametreyi çıkarıp yeniden dener."""
         for _ in range(3):
             try:
-                response = self.client.chat.completions.create(**params)
-                break
+                return self.client.chat.completions.create(**params)
             except BadRequestError as exc:
                 detail = str(exc).lower()
                 if "response_format" in params and ("response_format" in detail or "json_schema" in detail or "structured" in detail):
@@ -147,9 +148,12 @@ class AIService:
                 raise AIServiceError(_describe_error(exc)) from exc
             except Exception as exc:
                 raise AIServiceError(f"AI servisine ulaşılamadı: {exc}") from exc
-        else:
-            raise AIServiceError("AI isteği parametre uyuşmazlığı nedeniyle tamamlanamadı")
+        raise AIServiceError("AI isteği parametre uyuşmazlığı nedeniyle tamamlanamadı")
 
+    def _complete(self, messages: List[Dict[str, str]], schema: Optional[Dict[str, Any]],
+                  max_tokens: Optional[int] = None, temperature: float = 0.0) -> str:
+        """Tek bir sohbet tamamlama; metin döndürür."""
+        response = self._send(self._build_params(messages, schema, max_tokens, temperature))
         choice = response.choices[0]
         content = (choice.message.content or "").strip()
         if choice.finish_reason == "length" and not content:
@@ -158,6 +162,14 @@ class AIService:
                 "veya düşünen olmayan bir model seçin."
             )
         return content
+
+    def chat(self, messages: List[Dict[str, Any]], tools: List[Dict[str, Any]], max_tokens: Optional[int] = None):
+        """Araç çağırmalı tek tur; model mesajını (content, tool_calls) döndürür."""
+        response = self._send(self._build_params(messages, None, max_tokens, 0.0, tools))
+        choice = response.choices[0]
+        if choice.finish_reason == "length" and not choice.message.content and not choice.message.tool_calls:
+            raise AIServiceError("Model çıktı limitine takıldı. Ayarlar'dan çıktı belirteç limitini artırın.")
+        return choice.message
 
     # --- SQL üretimi ------------------------------------------------------
     def generate_sql(

@@ -19,3 +19,13 @@ def client(monkeypatch):
     monkeypatch.setattr(Settings, "get_api_key", staticmethod(lambda provider: None if provider != "local" else "local"))
     app.config["TESTING"] = True
     return app.test_client()
+
+
+@pytest.fixture(autouse=True)
+def fresh_settings():
+    """Her test varsayılan ayarlarla başlar (ayarlar dosyası testler arasında sızmasın)."""
+    from backend.config.config import Settings
+    path = Settings._path()
+    if path.exists():
+        path.unlink()
+    yield
