@@ -6,15 +6,15 @@
     <title>NIQ</title>
     <link rel="stylesheet" href="/static/css/fonts.css">
     <link rel="icon" href="/static/images/niq.png" type="image/png">
-    <link rel="stylesheet" href="/static/css/niq.css?v=6.1">
+    <link rel="stylesheet" href="/static/css/niq.css?v=6.2">
     <script src="/static/vendor/chart.umd.min.js"></script>
 </head>
 <body>
     <div class="ambient" aria-hidden="true"><i></i><i></i><i></i></div>
     <header class="top">
-        <button class="brand" id="brand" title="Yeni konuşma" aria-label="NIQ, yeni konuşma"><img src="/static/images/niq.png" width="32" height="32" alt=""></button>
-        <button class="pill" id="conn-pill" title="Bağlantıyı aç"><span class="dot" id="conn-dot"></span><span id="conn-label">Bağlı değil</span></button>
+        <button class="pill" id="conn-pill" title="Veri kaynaklarını yönet"><span id="conn-label">Veri kaynağı seç</span></button>
         <nav class="links" id="links">
+            <button class="icon-btn" id="brand" title="Yeni konuşma" aria-label="Yeni konuşma"><svg viewBox="0 0 24 24"><path d="M13 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-7M16 4l4 4M10 14l1-4 8-8 4 4-8 8-5 1z"/></svg></button>
             <button data-view="history">Geçmiş</button>
             <button data-view="reports">Raporlar</button>
             <button data-view="glossary">Sözlük</button>
@@ -155,7 +155,6 @@
 
             <div class="empty" id="empty">
                 <h1 class="greet" id="greet">Ne öğrenmek istersin?</h1>
-                <p class="lead" id="greet-sub">Veritabanına Türkçe sor, cevabı tablo olarak al.</p>
                 <div class="chips" id="suggestions"></div>
             </div>
             <div id="stream"></div>
@@ -256,7 +255,7 @@
         <div class="dock-inner">
             <div class="cmd-list" id="cmd-list" hidden></div>
             <div class="bar">
-                <textarea id="q" rows="1" placeholder="Bir şey sor…" aria-label="Sorun" autocomplete="off"></textarea>
+                <textarea id="q" rows="1" placeholder="Verilerine sor…" aria-label="Sorun" autocomplete="off"></textarea>
                 <div class="composer-tools">
                 <button class="icon-btn" id="mic" title="Konuşarak sor" aria-label="Konuşarak sor">
                     <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>

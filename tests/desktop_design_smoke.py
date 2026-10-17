@@ -115,7 +115,7 @@ def main():
             window.web_view.page().runJavaScript("""JSON.stringify({
                 ready:!!window.NIQ?.connect && NIQ.state.connected &&
                     !NIQ.$('db-source-file-btn').hidden && document.readyState==='complete' &&
-                    document.querySelector('.brand img').complete && document.querySelector('.brand img').naturalWidth>0,
+                    document.fonts.status==='loaded',
                 file:window.NIQ?.$('db_database')?.value,
                 overflow:document.documentElement.scrollWidth>innerWidth
             })""", result)

@@ -93,12 +93,7 @@
     function refreshEmpty() {
         const hasMessages = stream.children.length > 0;
         $('empty').hidden = hasMessages || !NIQ.state.connected || !$('connect').hidden;
-        const profile = NIQ.state.profile;
         $('greet').textContent = 'Ne öğrenmek istersin?';
-        $('greet-sub').textContent = profile
-            ? profile.scope_count > 1 ? `${profile.scope_count} veritabanı hazır. Soruyla ilgili kaynakları kendim seçerim.`
-                : `${profile.name || profile.database} hazır. Türkçe sor, cevabı tablo olarak al.`
-            : 'Önce bir veritabanına bağlan.';
     }
 
     async function loadSuggestions() {
