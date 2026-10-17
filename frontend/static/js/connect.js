@@ -4,8 +4,7 @@
  */
 (function () {
     const { $, el, api } = NIQ;
-    const state = { types: [], type: 'mssql', pasted: '', profiles: [] };
-    const LAST_KEY = 'niq.lastProfile';
+    const state = { types: [], type: 'mssql', pasted: '', profiles: [], lastProfile: '' };
 
     function status(message, kind) {
         const box = $('db-status');
@@ -63,6 +62,15 @@
     }
 
     function applyType(typeId, keepValues) {
+        if (!keepValues && state.type !== typeId) {
+            state.pasted = '';
+            ['db_paste', 'db_server', 'db_port', 'db_database', 'db_username', 'db_password',
+                'db_driver', 'db_profile_name', 'db_ssl', 'db_ssl_ca', 'db_ssh_host', 'db_ssh_port',
+                'db_ssh_user', 'db_ssh_key', 'db_ssh_password'].forEach((id) => { $(id).value = ''; });
+            NIQ.clear($('db-diagnostics'));
+            $('db-list-select').hidden = true;
+            status('');
+        }
         state.type = typeId;
         const type = currentType();
         const fileBased = !!type.file_based;
@@ -113,6 +121,10 @@
         try {
             const parsed = (await api('/db/parse', { body: { input: text } })).data;
             if (!parsed.recognized) { status('Bağlantı metni tanınmadı. URL, ODBC dizesi veya dosya yolu gir.', 'error'); return; }
+            ['db_server', 'db_port', 'db_database', 'db_username', 'db_password', 'db_driver',
+                'db_profile_name', 'db_ssl', 'db_ssl_ca', 'db_ssh_host', 'db_ssh_port', 'db_ssh_user',
+                'db_ssh_key', 'db_ssh_password'].forEach((id) => { $(id).value = ''; });
+            $('db_auth').value = 'sql';
             fill(parsed);
             state.pasted = text;
             const needsPassword = !parsed.has_password && !currentType().file_based && $('db_auth').value !== 'windows';
@@ -173,6 +185,8 @@
             const profile = (await api('/set_db', { body: payload })).data;
             $('db_password').value = '';
             $('db_ssh_password').value = '';
+            $('db_paste').value = '';
+            state.pasted = '';
             await afterConnect(profile);
         } catch (error) {
             if (!error.cancelled) status(error.message, 'error');
@@ -192,7 +206,6 @@
     }
 
     async function afterConnect(profile) {
-        try { localStorage.setItem(LAST_KEY, profile.id || ''); } catch (e) { /* özel pencere */ }
         status('');
         NIQ.setConnection(profile);
         NIQ.toast('Bağlandı: ' + (profile.name || profile.database));
@@ -201,16 +214,21 @@
 
     async function saveProfile() {
         const payload = getPayload();
-        const problem = validate(payload);
+        const active = NIQ.state.profile;
+        const sameConnection = active && active.type === payload.type && active.database === payload.database
+            && active.user === payload.user && (active.host || '') === (payload.host || (currentType().file_based ? '' : 'localhost'))
+            && (active.port || null) === (payload.port || currentType().default_port || null);
+        const problem = sameConnection ? null : validate(payload);
         if (problem) { status(problem, 'error'); return; }
         try {
-            await api('/connections', { body: payload });
+            const saved = (await api(sameConnection ? '/connections/current' : '/connections', {
+                body: sameConnection ? { name: payload.name || active.name } : payload,
+            })).data;
             status('Profil kaydedildi. Parola bu bilgisayarın güvenli deposunda.', 'ok');
             await loadProfiles();
             if (NIQ.state.connected) {
                 // Zamanlama için bağlı profilin kayıtlı olması gerekir: kayıtlı kopyaya geç
-                const saved = state.profiles.find((p) => p.name === (payload.name || p.name) && p.database === payload.database);
-                if (saved) NIQ.state.profile = { ...NIQ.state.profile, id: saved.id };
+                if (sameConnection) NIQ.state.profile = saved;
             }
         } catch (error) {
             if (!error.cancelled) status(error.message, 'error');
@@ -221,7 +239,6 @@
         try {
             await api('/clear_db', { body: {} });
             NIQ.setConnection(null);
-            try { localStorage.removeItem(LAST_KEY); } catch (e) { /* yok say */ }
             status('Bağlantı kapatıldı.', 'ok');
         } catch (error) {
             status(error.message, 'error');
@@ -231,7 +248,9 @@
     async function loadProfiles() {
         const box = $('saved-connections');
         try {
-            state.profiles = (await api('/connections')).data;
+            const response = await api('/connections');
+            state.profiles = response.data;
+            state.lastProfile = response.last_connection_id || '';
         } catch (error) {
             return;
         }
@@ -279,12 +298,9 @@
 
     /** Açılışta son kullanılan kayıtlı profile sessizce bağlanır. */
     async function autoConnect() {
-        let last = '';
-        try { last = localStorage.getItem(LAST_KEY) || ''; } catch (e) { /* yok say */ }
-        if (!last) return false;
         try {
             await loadProfiles();
-            const profile = state.profiles.find((p) => p.id === last);
+            const profile = state.profiles.find((p) => p.id === state.lastProfile);
             if (!profile) return false;
             const connected = (await api(`/connections/${encodeURIComponent(profile.id)}/connect`, { method: 'POST', body: {} })).data;
             NIQ.setConnection(connected);
@@ -320,8 +336,6 @@
         $('db-close-btn').addEventListener('click', closeConnection);
         $('db-list-btn').addEventListener('click', listDatabases);
         $('db-list-select').addEventListener('change', (e) => { if (e.target.value) $('db_database').value = e.target.value; });
-        ['db_server', 'db_port', 'db_database', 'db_username'].forEach((id) =>
-            $(id).addEventListener('input', () => { state.pasted = ''; }));
         $('conn-pill').addEventListener('click', () => { NIQ.go('chat'); show(); });
     };
 })();

@@ -3,7 +3,7 @@ HTTP API: bağlantı, tablolar, doğal dil sorgusu, geçmiş, ayarlar ve sağlı
 """
 import logging
 import threading
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import datetime
 from typing import Any, Dict, Optional, Tuple
 
@@ -21,8 +21,6 @@ from backend.db.profiles import (
     OPTION_KEYS,
     Profile,
     ProfileStore,
-    delete_password,
-    delete_ssh_secret,
     get_password,
     get_ssh_secret,
     parse_connection_input,
@@ -75,8 +73,12 @@ class AppState:
 
     def _profile_in_background(self, profile: Profile) -> None:
         """Bağlandıktan sonra veri profili henüz yoksa arka planda çıkarır (yerelde, salt-okunur)."""
+        active = self.connector
+        password = active._password if active else None
+        ssh_secret = active._ssh_secret if active else None
+
         def work():
-            connector = Connector(profile)
+            connector = Connector(profile, password=password, ssh_secret=ssh_secret)
             try:
                 if self.knowledge.profiled_tables(connector.db_key) == 0:
                     profile_database(connector, self.knowledge)
@@ -94,7 +96,7 @@ class AppState:
 
     def connect(self, profile: Profile, password: Optional[str], ssh_secret: Optional[str] = None,
                 trust_ssh_host: bool = False) -> None:
-        """Bağlanır. Kayıtsız (ad-hoc) bağlantının parolası oturum süresince keyring'de tutulur."""
+        """Bağlanır. Kayıtsız bağlantının sırları yalnızca süreç belleğinde tutulur."""
         probe = Connector(profile, password=password, ssh_secret=ssh_secret, trust_ssh_host=trust_ssh_host)
         try:
             ok_ = probe.test_connection()
@@ -102,15 +104,12 @@ class AppState:
             probe.close()
         if not ok_:
             raise ValidationError("Bağlantı kurulamadı. Ayrıntı için 'Test' adımını çalıştırın.")
-        if password:
-            set_password(profile, password)
-        if ssh_secret:
-            set_ssh_secret(profile, ssh_secret)
         if self.connector:
             self.connector.close()
-        self.connector = Connector(profile)
+        self.connector = Connector(profile, password=password, ssh_secret=ssh_secret, trust_ssh_host=trust_ssh_host)
         session["PROFILE"] = asdict(profile)
         session.permanent = True
+        Settings.save({"last_connection_id": profile.id if self.profiles.get(profile.id) else ""})
         self._profile_in_background(profile)
 
     def manager(self) -> Connector:
@@ -118,18 +117,19 @@ class AppState:
             data = session.get("PROFILE")
             if not data:
                 raise ValidationError("Veritabanı bağlantısı yok. Önce bağlanın.")
-            self.connector = Connector(Profile.from_dict(data))
+            profile = self.profiles.get(data.get("id", ""))
+            if not profile:
+                session.pop("PROFILE", None)
+                raise ValidationError("Oturum sona erdi. Veritabanına yeniden bağlanın.")
+            self.connector = Connector(profile)
         return self.connector
 
     def disconnect(self) -> None:
-        data = session.pop("PROFILE", None)
-        profile = self.connector.profile if self.connector else (Profile.from_dict(data) if data else None)
+        session.pop("PROFILE", None)
+        Settings.save({"last_connection_id": ""})
         if self.connector:
             self.connector.close()
             self.connector = None
-        if profile and not self.profiles.get(profile.id):
-            delete_password(profile)  # kayıtsız (ad-hoc) bağlantının parolalarını saklama
-            delete_ssh_secret(profile)
 
 
 state = AppState()
@@ -178,18 +178,22 @@ def _profile_from_body(data: Dict[str, Any]) -> Tuple[Profile, str]:
     password = merged.get("password") or merged.get("pwd") or ""
     raw = merged.get("connection_input") or merged.get("db_conn_str")
     if raw:
-        parsed = parse_connection_input(StringUtils.sanitize_input(raw, 2000))
+        try:
+            parsed = parse_connection_input(StringUtils.sanitize_input(raw, 2000))
+        except (ValueError, TypeError) as exc:
+            raise ValidationError("Bağlantı adresi veya port geçersiz") from exc
         if not parsed.get("recognized"):
             raise ValidationError("Bağlantı metni tanınmadı. URL, ODBC dizesi veya dosya yolu girin.")
         password = password or parsed.pop("password", "")
         parsed.pop("recognized", None)
+        merged["options"] = {**parsed.pop("options", {}), **(merged.get("options") or {})}
         for key, value in parsed.items():
-            if value not in (None, "") and not merged.get(key):
+            if key not in merged and value not in (None, ""):
                 merged[key] = value
     merged["user"] = merged.get("user") or merged.get("uid") or merged.get("username") or ""
     options = dict(merged.get("options") or {})
     for key in OPTION_KEYS:
-        if merged.get(key):
+        if key in merged:
             options[key] = merged[key]
     merged["options"] = options
     merged["type"] = merged.get("type") or "mssql"
@@ -220,7 +224,10 @@ def db_discover():
 @api_bp.route("/db/parse", methods=["POST"])
 def db_parse():
     """Yapıştırılan bağlantı metninden alanları tahmin eder (parola yanıtta dönmez)."""
-    parsed = parse_connection_input(_body().get("input", ""))
+    try:
+        parsed = parse_connection_input(_body().get("input", ""))
+    except (ValueError, TypeError) as exc:
+        raise ValidationError("Bağlantı adresi veya port geçersiz") from exc
     parsed["has_password"] = bool(parsed.pop("password", ""))
     return jsonify(ok(parsed))
 
@@ -272,7 +279,8 @@ def clear_database_credentials():
 
 @api_bp.route("/connections", methods=["GET"])
 def list_connections():
-    return jsonify(ok([p.public() for p in state.profiles.list()]))
+    return jsonify({**ok([p.public() for p in state.profiles.list()]),
+                    "last_connection_id": Settings.load().get("last_connection_id", "")})
 
 
 @api_bp.route("/connections", methods=["POST"])
@@ -294,12 +302,22 @@ def save_connection():
 
 @api_bp.route("/connections/current", methods=["POST"])
 def save_current_connection():
-    """KRİTİK: şu an bağlı (kayıtsız) bağlantıyı profil olarak saklar. Parolası zaten güvenli depoda olduğu için yeniden girilmez."""
+    """KRİTİK: bellekteki bağlantıyı ve sırlarını onayla kalıcılaştırır."""
     data = _body()
-    profile = state.manager().profile
+    connector = state.manager()
+    profile = connector.profile
+    if data.get("name"):
+        profile = replace(profile, name=StringUtils.sanitize_input(data["name"], 100))
     require_approval(data, "save_connection", f"{profile.name} ({profile.user or 'kullanıcısız'})")
     if not state.profiles.get(profile.id):
-        state.profiles.save(profile)
+        if connector._password:
+            set_password(profile, connector._password)
+        if connector._ssh_secret:
+            set_ssh_secret(profile, connector._ssh_secret)
+    state.profiles.save(profile)
+    connector.profile = profile
+    session["PROFILE"] = asdict(profile)
+    Settings.save({"last_connection_id": profile.id})
     return jsonify(ok(profile.public(), "Bağlantı profili kaydedildi."))
 
 

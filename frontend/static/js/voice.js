@@ -9,6 +9,10 @@
     let stream = null;
     let chunks = [];
     let stopTimer = null;
+    let starting = false;
+    let generation = 0;
+    let recordingError = null;
+    let transcription = null;
 
     function supported() {
         return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
@@ -73,41 +77,86 @@
         /** Kaydı başlatır. onAutoStop: 60 sn dolunca otomatik durduğunda çağrılır. */
         async start(onAutoStop) {
             if (!supported()) throw new Error('Bu ortamda mikrofon kaydı desteklenmiyor');
+            if (starting || recorder) throw new Error('Mikrofon zaten açık');
+            starting = true;
+            const request = ++generation;
             try {
-                stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const acquired = await navigator.mediaDevices.getUserMedia({ audio: true });
+                if (request !== generation) {
+                    acquired.getTracks().forEach((track) => track.stop());
+                    throw new Error('Kayıt iptal edildi');
+                }
+                stream = acquired;
+                chunks = [];
+                recordingError = null;
+                recorder = new MediaRecorder(stream);
+                recorder.ondataavailable = (event) => { if (event.data.size) chunks.push(event.data); };
+                recorder.onerror = () => {
+                    recordingError = new Error('Mikrofon kaydı kesildi. Tekrar dene');
+                    if (onAutoStop) onAutoStop();
+                    else release();
+                };
+                recorder.start();
+                stopTimer = setTimeout(() => { if (onAutoStop) onAutoStop(); }, MAX_SECONDS * 1000);
             } catch (error) {
-                throw new Error('Mikrofon izni verilmedi veya mikrofon bulunamadı');
+                release();
+                const messages = {
+                    NotAllowedError: 'Mikrofon izni verilmedi. Windows mikrofon erişimini kontrol et',
+                    NotFoundError: 'Mikrofon bulunamadı. Bir mikrofon bağla',
+                    NotReadableError: 'Mikrofon açılamadı. Başka bir uygulama kullanıyor olabilir',
+                };
+                throw new Error(messages[error.name] || error.message || 'Mikrofon kaydı başlatılamadı');
+            } finally {
+                starting = false;
             }
-            chunks = [];
-            recorder = new MediaRecorder(stream);
-            recorder.ondataavailable = (event) => { if (event.data.size) chunks.push(event.data); };
-            recorder.start();
-            stopTimer = setTimeout(() => { if (onAutoStop) onAutoStop(); }, MAX_SECONDS * 1000);
         },
 
         /** Kaydı bitirir ve metne çevirir. */
         async stop() {
             if (!recorder) return '';
             const active = recorder;
-            const finished = new Promise((resolve) => { active.onstop = resolve; });
-            active.stop();
-            await finished;
-            const blob = new Blob(chunks, { type: active.mimeType || 'audio/webm' });
-            release();
+            const request = generation;
+            let blob;
+            try {
+                if (active.state !== 'inactive') {
+                    const finished = new Promise((resolve) => { active.onstop = resolve; });
+                    active.stop();
+                    release();
+                    await finished;
+                }
+                if (recordingError) throw recordingError;
+                blob = new Blob(chunks, { type: active.mimeType || 'audio/webm' });
+            } finally {
+                release();
+            }
+            if (request !== generation) return '';
             if (blob.size < 2000) return '';  // neredeyse boş kayıt
             const wav = await toWav(blob);
+            if (request !== generation) return '';
             const form = new FormData();
             form.append('audio', wav, 'ses.wav');
             form.append('language', 'tr');
-            const response = await fetch('/api/transcribe', { method: 'POST', body: form });
-            const result = await response.json();
-            if (!response.ok || result.success === false) throw new Error(result.error || 'Ses metne çevrilemedi');
-            return (result.data.text || '').trim();
+            const controller = new AbortController();
+            transcription = controller;
+            try {
+                const response = await fetch('/api/transcribe', { method: 'POST', body: form, signal: controller.signal });
+                const result = await response.json();
+                if (!response.ok || result.success === false) throw new Error(result.error || 'Ses metne çevrilemedi');
+                return request === generation ? (result.data?.text || '').trim() : '';
+            } finally {
+                if (transcription === controller) transcription = null;
+            }
         },
 
         cancel() {
-            if (recorder) { try { recorder.onstop = null; recorder.stop(); } catch (e) { /* yok say */ } }
+            generation++;
+            if (transcription) { transcription.abort(); transcription = null; }
+            if (recorder) {
+                try { recorder.onstop = null; recorder.ondataavailable = null; recorder.stop(); }
+                catch (e) { /* yok say */ }
+            }
             release();
+            chunks = [];
         },
     };
 })();

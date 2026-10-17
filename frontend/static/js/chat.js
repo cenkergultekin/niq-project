@@ -11,6 +11,8 @@
     let busy = false;
     let listening = false;
     let transcribing = false;
+    let startingVoice = false;
+    let connectionGeneration = 0;
     const recent = [];
     let recentIndex = -1;
     let selected = 0;
@@ -104,6 +106,7 @@
     }
 
     async function newConversation() {
+        cancelRecording();
         const old = NIQ.state.conversationId;
         NIQ.state.conversationId = NIQ.newId();
         NIQ.clear(stream);
@@ -114,6 +117,7 @@
     }
 
     function onConnectionChange() {
+        cancelRecording();
         const connected = NIQ.state.connected;
         input.placeholder = connected ? 'Bir şey sor' : 'Önce bağlan';
         NIQ.clear(stream);
@@ -442,35 +446,56 @@
     }
 
     async function finishRecording() {
+        if (transcribing) return;
         listening = false;
         micBtn.classList.remove('rec');
+        micBtn.setAttribute('aria-pressed', 'false');
         transcribing = true;
+        micBtn.disabled = true;
         input.placeholder = 'Metne çeviriyorum...';
+        const connection = connectionGeneration;
         try {
             const text = await NIQ.voice.stop();
+            if (connection !== connectionGeneration) return;
             if (!text) { NIQ.toast('Ses anlaşılamadı, tekrar dene'); return; }
             input.value = text;
             resize();
             if (voiceAutoSend()) submit();
         } catch (error) {
-            NIQ.toast(error.message, 'error');
+            if (connection === connectionGeneration) NIQ.toast(error.message, 'error');
         } finally {
             transcribing = false;
+            micBtn.disabled = false;
             input.placeholder = NIQ.state.connected ? 'Bir şey sor' : 'Önce bağlan';
         }
     }
 
+    function cancelRecording() {
+        connectionGeneration++;
+        NIQ.voice.cancel();
+        listening = false;
+        micBtn.classList.remove('rec');
+        micBtn.setAttribute('aria-pressed', 'false');
+        input.placeholder = NIQ.state.connected ? 'Bir şey sor' : 'Önce bağlan';
+    }
+
     async function toggleMic() {
-        if (transcribing) return;
+        if (transcribing || startingVoice) return;
         if (listening) { await finishRecording(); return; }
         if (!NIQ.state.connected) { NIQ.toast('Önce bir veritabanına bağlan', 'error'); return; }
         try {
+            startingVoice = true;
+            micBtn.disabled = true;
             await NIQ.voice.start(() => finishRecording());
             listening = true;
             micBtn.classList.add('rec');
+            micBtn.setAttribute('aria-pressed', 'true');
             input.placeholder = 'Dinliyorum. Bitirince mikrofona tekrar bas';
         } catch (error) {
             NIQ.toast(error.message, 'error');
+        } finally {
+            startingVoice = false;
+            micBtn.disabled = false;
         }
     }
 
@@ -533,5 +558,5 @@
         if (!NIQ.voice.supported()) micBtn.hidden = true;
     }
 
-    NIQ.chat = { ask, plan, bind, refreshEmpty, onConnectionChange, newConversation, renderTable, showStored };
+    NIQ.chat = { ask, plan, bind, refreshEmpty, onConnectionChange, newConversation, renderTable, showStored, cancelRecording };
 })();

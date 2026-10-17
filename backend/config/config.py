@@ -95,6 +95,7 @@ PROVIDERS: Dict[str, Dict[str, Any]] = {
 }
 
 DEFAULT_SETTINGS: Dict[str, Any] = {
+    "last_connection_id": "",
     "provider": "openrouter",
     "models": {name: p["default_model"] for name, p in PROVIDERS.items()},
     "local_base_url": PROVIDERS["local"]["base_url"],

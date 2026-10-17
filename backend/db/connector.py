@@ -8,6 +8,7 @@ import logging
 import re
 import threading
 import time
+from dataclasses import replace
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
@@ -209,8 +210,16 @@ class Connector:
         sql = queries.get(self.profile.type)
         if not sql:
             return []
-        with self.engine.connect() as conn:
-            return [row[0] for row in conn.execute(text(sql)).fetchall()]
+        # Adı henüz bilinmeyen/yanlış yazılmış veritabanına giriş yapmaya çalışma.
+        # PostgreSQL boş adla kullanıcı adını DB sanır; SQL Server master ister.
+        catalog = {"postgresql": "postgres", "mssql": "master", "mysql": ""}[self.profile.type]
+        browser = Connector(replace(self.profile, database=catalog), password=self._password,
+                            ssh_secret=self._ssh_secret, trust_ssh_host=self._trust_ssh_host)
+        try:
+            with browser.engine.connect() as conn:
+                return [row[0] for row in conn.execute(text(sql)).fetchall()]
+        finally:
+            browser.close()
 
     # --- şema -------------------------------------------------------------
     def _schemas(self, inspector) -> List[Optional[str]]:

@@ -25,7 +25,7 @@ ERROR_HINTS = [
     (r"cannot open database|does not exist|unknown database|database .* not found",
      "Veritabanı adı bulunamadı. 'Veritabanlarını getir' ile sunucudaki adları listeleyip seçin."),
     (r"certificate|ssl|tls",
-     "Sertifika sorunu. Ayarlar > Gelişmiş > 'Sunucu sertifikasına güven' seçeneğini açın."),
+     "Bağlantı > Gelişmiş bölümündeki TLS ayarlarını kontrol edin; sunucu SSL desteklemeli ve doğrulama için doğru CA sertifikası kullanılmalı."),
     (r"timed out|timeout|refused|could not connect|can't connect|unreachable|no route|network-related|actively refused",
      "Sunucuya ulaşılamadı. Adres ve portu, sunucunun çalıştığını ve güvenlik duvarının portu açtığını kontrol edin."),
     (r"data source name not found|no driver|can't open lib|driver",
@@ -59,6 +59,9 @@ def _check_driver(profile: Profile) -> Dict[str, str]:
         if not installed:
             return _step("driver", "Sürücü", FAIL, "SQL Server ODBC sürücüsü bulunamadı", dialect.install_hint)
         if driver == "SQL Server":
+            if profile.options.get("ssl") in ("require", "verify"):
+                return _step("driver", "Sürücü", FAIL, "Eski SQL Server sürücüsü seçilen TLS ayarlarını desteklemiyor",
+                             "Şifreli bağlantı için Microsoft ODBC Driver 18 kurun: https://aka.ms/odbc18")
             return _step("driver", "Sürücü", WARN, "Windows ile gelen eski 'SQL Server' sürücüsü kullanılıyor",
                          "Çalışır, ancak yeni TLS ve sunucu özellikleri için Microsoft ODBC Driver 18 kurmanız önerilir: https://aka.ms/odbc18")
         return _step("driver", "Sürücü", OK, driver)

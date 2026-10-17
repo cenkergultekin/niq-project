@@ -46,7 +46,9 @@ class LocalOnlyPage(QWebEnginePage):
             permission.deny()
 
     def acceptNavigationRequest(self, url, nav_type, is_main_frame):
-        if is_main_frame and not url.toString().startswith(self._origin):
+        origin = QUrl(self._origin)
+        local = url.scheme() == origin.scheme() and url.host() == origin.host() and url.port() == origin.port()
+        if is_main_frame and not local:
             QDesktopServices.openUrl(url)
             return False
         return super().acceptNavigationRequest(url, nav_type, is_main_frame)
@@ -141,11 +143,19 @@ class NIQDesktopApp(QMainWindow):
             if self.dev_view:
                 self.dev_view.close()
             try:
-                self.server.close()
+                self.shutdown()
             finally:
                 event.accept()
         else:
             event.ignore()
+
+    def shutdown(self) -> None:
+        """İstek işçileri bitmeden soketleri kapatmak Windows'ta WinError 10038 üretir."""
+        self.timer.stop()
+        self.web_view.stop()
+        self.server.task_dispatcher.shutdown(timeout=5)
+        self.server.close()
+        self.server_thread.join(timeout=2)
 
 
 def main() -> None:

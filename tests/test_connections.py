@@ -50,6 +50,47 @@ def test_parse_unrecognized():
     assert not parse_connection_input("")["recognized"]
 
 
+@pytest.mark.parametrize("connection, options", [
+    ("postgresql://u:p@h/d?sslmode=require", {"ssl": "require"}),
+    ("postgres://u:p@h/d?sslmode=verify-full&sslrootcert=C%3A%2Fca.pem", {"ssl": "verify", "ssl_ca": "C:/ca.pem"}),
+    ("mysql://u:p@h/d?ssl-mode=REQUIRED", {"ssl": "require"}),
+    ("Server=h;Database=d;Encrypt=yes;TrustServerCertificate=no;", {"ssl": "verify"}),
+    ("jdbc:sqlserver://h;databaseName=d;encrypt=true;trustServerCertificate=true", {"ssl": "require"}),
+])
+def test_pasted_connection_keeps_tls_settings(connection, options):
+    assert parse_connection_input(connection)["options"] == options
+
+
+def test_libpq_connection_with_quoted_password():
+    parsed = parse_connection_input("host=localhost port=5433 dbname=shop user=reader password='two words' sslmode=require")
+    assert parsed["type"] == "postgresql" and parsed["port"] == 5433
+    assert parsed["password"] == "two words" and parsed["options"] == {"ssl": "require"}
+
+
+def test_odbc_escaped_braces_and_semicolon_in_password():
+    from urllib.parse import unquote_plus
+    uri = build_url("mssql", "localhost", 1433, "shop", "reader", "p;}}tail}")
+    parsed = parse_connection_input(unquote_plus(uri.split("odbc_connect=", 1)[1]))
+    assert parsed["password"] == "p;}}tail}" and parsed["database"] == "shop"
+
+
+@pytest.mark.parametrize("db_type", ["postgresql", "mysql", "mssql"])
+def test_url_roundtrip_with_special_characters(db_type):
+    uri = build_url(db_type, "localhost", 1433 if db_type == "mssql" else None,
+                    "sales reports?archive=1", "reader name+", "secret +?;}")
+    parsed = parse_connection_input(uri)
+    assert parsed["database"] == "sales reports?archive=1"
+    assert parsed["user"] == "reader name+" and parsed["password"] == "secret +?;}"
+
+
+@pytest.mark.parametrize("port", [-1, 65536])
+def test_invalid_ports_are_rejected(port):
+    with pytest.raises(ValueError, match="Port"):
+        Profile(type="postgresql", port=port)
+    with pytest.raises(ValueError, match="SSH portu"):
+        Profile(type="postgresql", options={"ssh_port": str(port)})
+
+
 def test_profile_defaults():
     profile = Profile(type="postgresql", database="shop")
     assert profile.host == "localhost" and profile.port == 5432 and "PostgreSQL" in profile.name
@@ -129,7 +170,8 @@ def api(client, tmp_path, monkeypatch):
     monkeypatch.setattr(routes.state, "profiles", ProfileStore(tmp_path / "conn.json"))
     monkeypatch.setattr(routes.state, "connector", None)
     monkeypatch.setattr("backend.routes.routes.set_password", lambda *a: None)
-    monkeypatch.setattr("backend.routes.routes.delete_password", lambda *a: None)
+    monkeypatch.setattr("backend.db.profiles.delete_password", lambda *a: None)
+    monkeypatch.setattr("backend.db.profiles.delete_ssh_secret", lambda *a: None)
     return client
 
 
@@ -138,6 +180,43 @@ def test_api_types_and_parse(api):
     assert {t["id"] for t in types} == set(DIALECTS)
     parsed = api.post("/api/db/parse", json={"input": "postgresql://u:secret@h/db"}).get_json()["data"]
     assert parsed["type"] == "postgresql" and parsed["has_password"] and "password" not in parsed
+
+
+@pytest.mark.parametrize("connection", ["postgresql://u:p@h:bad/d", "mysql://u:p@h:70000/d", {"host": "h"}])
+def test_bad_paste_is_actionable_not_server_error(api, connection):
+    response = api.post("/api/db/parse", json={"input": connection})
+    assert response.status_code == 400
+    assert "geçersiz" in response.get_json()["error"]
+
+
+def test_editing_pasted_fields_keeps_password_and_merges_tls_options():
+    from backend.routes.routes import _profile_from_body
+
+    profile, password = _profile_from_body({"connection_input": "postgresql://u:secret@h/old?sslmode=require",
+                                           "database": "new", "options": {"ssh_host": "jump"}})
+    assert profile.database == "new" and password == "secret"
+    assert profile.options == {"ssl": "require", "ssh_host": "jump"}
+    profile, _ = _profile_from_body({"connection_input": "postgresql://u:secret@h/old?sslmode=require", "ssl": ""})
+    assert "ssl" not in profile.options
+
+
+def test_connect_keeps_secrets_in_memory_until_save_is_approved(api, sqlite_path, monkeypatch):
+    saved = []
+    monkeypatch.setattr(routes, "set_password", lambda *args: saved.append(args))
+    monkeypatch.setattr(routes.state, "_profile_in_background", lambda *args: None)
+    assert api.post("/api/set_db", json={"type": "sqlite", "database": sqlite_path, "password": "temporary"}).status_code == 200
+    assert not saved
+    assert routes.state.connector._password == "temporary"
+    assert api.post("/api/connections/current", json={}).status_code == 409 and not saved
+    assert api.post("/api/connections/current", json={"approved": True}).status_code == 200
+    assert len(saved) == 1 and saved[0][1] == "temporary"
+    assert api.post("/api/connections/current", json={"approved": True}).status_code == 200
+    assert len(saved) == 1
+    rename = api.post("/api/connections/current", json={"name": "Yeni ad"})
+    assert rename.status_code == 409 and routes.state.connector.profile.name != "Yeni ad"
+    renamed = api.post("/api/connections/current", json={"name": "Yeni ad", "approved": True})
+    assert renamed.status_code == 200 and renamed.get_json()["data"]["name"] == "Yeni ad"
+    assert len(saved) == 1
 
 
 def test_api_diagnose_with_pasted_string(api, sqlite_path):

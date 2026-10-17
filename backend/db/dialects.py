@@ -7,7 +7,7 @@ AI istemi bu tanımdan beslenir.
 """
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
-from urllib.parse import quote_plus
+from urllib.parse import quote, quote_plus
 
 
 @dataclass(frozen=True)
@@ -112,7 +112,7 @@ def build_url(dialect_id: str, host: str = "", port: Optional[int] = None, datab
     options = dict(options or {})
     auth = ""
     if user:
-        auth = quote_plus(user) + (":" + quote_plus(password) if password else "") + "@"
+        auth = quote(user, safe="") + (":" + quote(password, safe="") if password else "") + "@"
     host = (host or "localhost").strip()
     port = port or get_dialect(dialect_id).default_port
 
@@ -121,13 +121,23 @@ def build_url(dialect_id: str, host: str = "", port: Optional[int] = None, datab
         return f"sqlite:///file:{quote_plus(path, safe='/:')}?mode=ro&uri=true"
     if dialect_id == "mssql":
         from backend.core.utils import ODBCUtils
+        try:
+            import pyodbc
+            # SQLAlchemy NullPool tek başına yetmez: ODBC'nin kendi havuzu girişleri açık tutar.
+            # Bağlantıyı kapatınca kullanıcı oturumu da gerçekten kapanmalı.
+            pyodbc.pooling = False
+        except ImportError:
+            pass  # Sürücü eksikliğini teşhis adımı açıklar.
         driver = ODBCUtils.pick_driver(options.pop("driver", None))
         server = host if "\\" in host or not port else f"{host},{port}"
-        parts = [f"DRIVER={{{driver}}}", f"SERVER={server}", f"DATABASE={database}"]
+        def odbc_value(value):
+            return "{" + value.replace("}", "}}") + "}"
+
+        parts = ["DRIVER=" + odbc_value(driver), "SERVER=" + odbc_value(server), "DATABASE=" + odbc_value(database)]
         if options.pop("auth", "sql") == "windows":
             parts.append("Trusted_Connection=yes")
         else:
-            parts += [f"UID={user}", "PWD={" + password.replace("}", "}}") + "}"]
+            parts += ["UID=" + odbc_value(user), "PWD=" + odbc_value(password)]
         ssl = options.pop("ssl", "")
         trust_default = options.pop("trust_server_cert", "yes") != "no"
         if ssl == "disable":
@@ -141,6 +151,9 @@ def build_url(dialect_id: str, host: str = "", port: Optional[int] = None, datab
         options.pop("ssl_ca", None)
         parts += [f"{k}={v}" for k, v in options.items() if not k.startswith("ssh_")]
         return "mssql+pyodbc:///?odbc_connect=" + quote_plus(";".join(parts))
+    if ":" in host and not host.startswith("["):
+        host = f"[{host}]"
+    database = quote(database, safe="")
     if dialect_id == "postgresql":
         params = {"disable": "disable", "require": "require", "verify": "verify-full"}
         query = ""

@@ -8,9 +8,14 @@ Ortam değişkeni verilmezse atlanır (normal CI ve geliştirme akışını yava
 Veritabanı (niq_it) önceden oluşturulmuş olmalı; testler içindeki tabloları kendileri kurup siler.
 """
 import os
+import secrets
+import tempfile
+from dataclasses import replace
+from pathlib import Path
 
 import pytest
 from sqlalchemy import create_engine, text
+from test_network_security import ssh_env as ssh_env
 
 from backend.config.config import Config
 from backend.db import diagnostics
@@ -48,11 +53,12 @@ DROP = {
 
 def configured():
     found = []
-    for db_type, env in (("postgresql", "NIQ_IT_POSTGRES"), ("mysql", "NIQ_IT_MYSQL"), ("mssql", "NIQ_IT_MSSQL")):
+    for db_type, env in (("postgresql", "NIQ_IT_POSTGRES"), ("mysql", "NIQ_IT_MYSQL"),
+                         ("mysql", "NIQ_IT_MARIADB"), ("mssql", "NIQ_IT_MSSQL")):
         raw = os.environ.get(env)
         if raw:
             host, port, database, user, password = raw.split(":", 4)
-            found.append(pytest.param((db_type, host, int(port), database, user, password), id=db_type))
+            found.append(pytest.param((db_type, host, int(port), database, user, password), id=env.removeprefix("NIQ_IT_").lower()))
     return found or [pytest.param(None, id="yapilandirilmadi", marks=pytest.mark.skip(reason="NIQ_IT_* ortam değişkeni yok"))]
 
 
@@ -120,6 +126,54 @@ def test_list_databases_and_diagnose(server):
     assert [s["id"] for s in result["steps"]][:4] == ["driver", "network", "login", "read"]
 
 
+@pytest.mark.parametrize("database", ["", "this_database_does_not_exist"])
+def test_list_databases_before_database_name_is_known(server, database):
+    browser = Connector(replace(server.profile, database=database), password=server._password)
+    try:
+        assert server.profile.database in browser.list_databases()
+    finally:
+        browser.close()
+
+
+def test_http_connection_flow_and_cleanup(server, client, monkeypatch):
+    """Gerçek sürücüyle yapıştır -> listele -> teşhis -> bağlan -> şema -> sorgu -> kapat."""
+    from types import SimpleNamespace
+
+    from backend.routes import routes
+
+    monkeypatch.setattr(routes.state, "connector", None)
+    monkeypatch.setattr(routes.state, "_profile_in_background", lambda *args: None)
+    monkeypatch.setattr(routes.state, "ai_service", SimpleNamespace(
+        ai_available=True, model="fixture", config={"provider": "local"},
+        generate_sql=lambda *args, **kwargs: {"sql": "SELECT COUNT(*) AS n FROM it_orders", "explanation": "Sipariş sayısı"}))
+    writes = []
+    monkeypatch.setattr(routes, "set_password", lambda *args: writes.append(args))
+    profile = server.profile
+    uri = build_url(profile.type, profile.host, profile.port, profile.database, profile.user, server._password)
+    # SQL Server build_url bir SQLAlchemy odbc_connect URL'sidir; kullanıcıya sunulan ODBC metnini kullan.
+    if profile.type == "mssql":
+        from urllib.parse import unquote_plus
+        uri = unquote_plus(uri.split("odbc_connect=", 1)[1])
+    parsed = client.post("/api/db/parse", json={"input": uri}).get_json()["data"]
+    assert parsed["recognized"] and parsed["type"] == profile.type and parsed["has_password"]
+    assert "password" not in parsed
+    body = {"connection_input": uri}
+    listed = client.post("/api/db/databases", json=body)
+    assert listed.status_code == 200 and profile.database in listed.get_json()["data"]
+    assert client.post("/api/db/diagnose", json=body).get_json()["data"]["ok"]
+    connected = client.post("/api/set_db", json=body)
+    assert connected.status_code == 200, connected.get_json()
+    assert not writes, "kayıtsız bağlantı parolayı kalıcı depoya yazdı"
+    assert "it_orders" in client.get("/api/tables").get_json()["data"]
+    queried = client.post("/api/query", json={"question": "Kaç sipariş var?", "mode": "query"})
+    assert queried.status_code == 200, queried.get_json()
+    assert queried.get_json()["results"] == [{"n": 3}]
+    denied = client.post("/api/connections/current", json={})
+    assert denied.status_code == 409 and not writes
+    assert client.post("/api/clear_db", json={}).status_code == 200
+    assert not client.get("/api/health").get_json()["data"]["database_connected"]
+
+
 def test_wrong_password_gives_actionable_hint(server):
     bad = diagnostics.diagnose(server.profile, "bu-parola-yanlis")
     assert not bad["ok"]
@@ -127,9 +181,110 @@ def test_wrong_password_gives_actionable_hint(server):
     assert login["status"] == "fail" and login["hint"], login
 
 
+def test_real_database_through_ssh_tunnel(server, ssh_env, tmp_path, monkeypatch):
+    from backend.db.tunnel import KnownHosts
+
+    monkeypatch.setattr("backend.db.tunnel.KnownHosts", lambda: KnownHosts(tmp_path / "known-hosts.json"))
+    profile = replace(server.profile, options={"ssh_host": "127.0.0.1", "ssh_port": str(ssh_env["ssh_port"]),
+                                               "ssh_user": "tunnel"})
+    tunneled = Connector(profile, password=server._password, ssh_secret="secret", trust_ssh_host=True)
+    try:
+        assert tunneled.test_connection()
+        assert "it_orders" in tunneled.get_tables()
+        assert run_sql(tunneled, "SELECT COUNT(*) AS n FROM it_orders")["results"] == [{"n": 3}]
+    finally:
+        tunneled.close()
+    assert tunneled._tunnel is None
+
+
+def test_requested_tls_is_encrypted_or_explicitly_rejected(server):
+    secured = Connector(replace(server.profile, options={"ssl": "require"}), password=server._password)
+    checks = {"postgresql": "SELECT ssl AS encrypted FROM pg_stat_ssl WHERE pid = pg_backend_pid()",
+              "mysql": "SHOW SESSION STATUS LIKE 'Ssl_cipher'",
+              "mssql": "SELECT encrypt_option AS encrypted FROM sys.dm_exec_connections WHERE session_id = @@SPID"}
+    try:
+        result = secured.execute_readonly(checks[server.profile.type], 10)
+        if result.is_successful:
+            row = result.results[0]
+            assert row.get("encrypted") in (True, "TRUE") or bool(row.get("Value")), row
+        else:
+            diagnosed = diagnostics.diagnose(secured.profile, server._password)
+            assert not diagnosed["ok"]
+            assert any(step["status"] == "fail" and step["hint"] for step in diagnosed["steps"])
+    finally:
+        secured.close()
+
+
+def test_postgres_certificate_verification(server):
+    if server.profile.type != "postgresql":
+        return  # Diğer lehçelerin sertifikası bu PostgreSQL test CA'sıyla imzalı değildir.
+    cert = Path(tempfile.gettempdir()) / "niq-local-postgres.crt"
+    if not cert.exists():
+        pytest.skip("Yerel TLS fixture'ı yok; tests/local_databases.py kullanın")
+    verified = Connector(replace(server.profile, options={"ssl": "verify", "ssl_ca": str(cert)}), password=server._password)
+    try:
+        assert verified.test_connection()
+        assert run_sql(verified, "SELECT COUNT(*) AS n FROM it_orders")["results"] == [{"n": 3}]
+    finally:
+        verified.close()
+
+
+def test_actual_readonly_account_and_permission_diagnostics(server):
+    """Salt-okunur kullanıcı gerçekten bağlanır; DB yazmayı guard'dan bağımsız reddeder."""
+    name = "niq_reader_" + secrets.token_hex(5)
+    password = "Niq_" + secrets.token_hex(16) + "!"
+    kind = server.profile.type
+    admin = create_engine(server._url(), isolation_level="AUTOCOMMIT")
+    setup = {
+        "postgresql": [f"CREATE ROLE {name} LOGIN PASSWORD '{password}'", f"GRANT USAGE ON SCHEMA public TO {name}",
+                       f"GRANT SELECT ON ALL TABLES IN SCHEMA public TO {name}"],
+        "mysql": [f"CREATE USER '{name}'@'%' IDENTIFIED BY '{password}'", f"GRANT SELECT ON niq_it.* TO '{name}'@'%'"],
+        "mssql": [f"CREATE LOGIN [{name}] WITH PASSWORD='{password}', CHECK_POLICY=OFF",
+                  f"CREATE USER [{name}] FOR LOGIN [{name}]", f"ALTER ROLE db_datareader ADD MEMBER [{name}]"],
+    }
+    cleanup = {
+        "postgresql": [f"DROP OWNED BY {name}", f"DROP ROLE {name}"],
+        "mysql": [f"DROP USER '{name}'@'%'"],
+        "mssql": [f"DROP USER [{name}]", f"DROP LOGIN [{name}]"],
+    }
+    with admin.connect() as conn:
+        for sql in setup[kind]:
+            conn.execute(text(sql))
+    readonly = Connector(replace(server.profile, user=name), password=password)
+    try:
+        result = diagnostics.diagnose(readonly.profile, password)
+        assert result["ok"], result
+        assert next(s for s in result["steps"] if s["id"] == "privileges")["status"] == "ok"
+        assert run_sql(readonly, "SELECT COUNT(*) AS n FROM it_orders")["results"] == [{"n": 3}]
+        assert not readonly.execute_readonly("DELETE FROM it_orders", 10).is_successful
+    finally:
+        readonly.close()
+        with admin.connect() as conn:
+            for sql in cleanup[kind]:
+                conn.execute(text(sql))
+        admin.dispose()
+
+
+def test_agent_cli_connects_without_persisting_credentials(server, monkeypatch, capsys):
+    import json
+
+    import niq_cli
+
+    profile = server.profile
+    monkeypatch.setenv("NIQ_LOCAL_PASSWORD", server._password)
+    connection = ["--type", profile.type, "--host", profile.host, "--port", str(profile.port),
+                  "--database", profile.database, "--user", profile.user, "--password-env", "NIQ_LOCAL_PASSWORD"]
+    assert niq_cli.main(["diagnose", *connection]) == 0
+    assert json.loads(capsys.readouterr().out)["data"]["ok"]
+    assert niq_cli.main(["sql", *connection, "SELECT COUNT(*) AS n FROM it_orders"]) == 0
+    assert json.loads(capsys.readouterr().out)["results"] == [{"n": 3}]
+
+
 def test_query_timeout_is_enforced(server, monkeypatch):
     monkeypatch.setattr(Config, "QUERY_TIMEOUT", 1)
-    sleeps = {"postgresql": "SELECT pg_sleep(5)", "mysql": "SELECT SLEEP(5)", "mssql": "WAITFOR DELAY '00:00:05'"}
+    # MySQL tek başına SLEEP zaman aşımında hata yerine 1 döndürür.
+    sleeps = {"postgresql": "SELECT pg_sleep(5)", "mysql": "SELECT id FROM it_orders WHERE SLEEP(5) = 0",
+              "mssql": "WAITFOR DELAY '00:00:05'"}
     sleeper = Connector(server.profile, password=server._password)
     result = sleeper.execute_readonly(sleeps[server.profile.type], 10)
     sleeper.close()
