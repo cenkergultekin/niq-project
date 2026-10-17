@@ -1,6 +1,14 @@
 # NIQ Desktop - Natural Intelligence Query
 
-Doğal dilde sorduğunuz soruları Microsoft SQL Server için salt-okunur, doğrulanmış T-SQL sorgularına çeviren masaüstü uygulaması. PySide6 (Qt WebEngine) arayüzü, yerel Flask API'si ve OpenAI / OpenRouter / yerel (Ollama, LM Studio) model desteği.
+Doğal dil sorularını SQL Server, PostgreSQL, MySQL/MariaDB ve SQLite üzerinde salt-okunur, doğrulanmış sorgulara çeviren masaüstü uygulaması. PySide6 arayüzü, yerel Flask API'si, ChatGPT planı ve çoklu AI hesabı desteği.
+
+## AI hesabı bağlama
+
+Ayarlar'daki **Continue with ChatGPT** veya **OpenRouter ile bağlan** sistem tarayıcısını başlatır. Girişten sonra hesabı ve modeli seçip **Hesabı kullan** ile devam edin. ChatGPT'nin açık kaynak ve yerel kullanım için yayımladığı resmî akış kullanılır; plan uygunluğu ve kullanım izni sağlayıcıda belirlenir.
+
+**API anahtarı ekle**, OpenAI, Anthropic, OpenRouter, Azure OpenAI, özel OpenAI uyumlu ve yerel sunucular için adlandırılmış hesaplar oluşturur. Aynı sağlayıcıdan birden fazla hesap eklenebilir. Azure'da kaynak adresi ve deployment adı yeterlidir; `/openai/v1` otomatik tamamlanır. Anahtarlar işletim sisteminin güvenli kasasında tutulur.
+
+Sohbet ve ses hesapları ayrıdır. ChatGPT girişi ses transkripsiyonunu kapsamaz; ses hesabı kullanıcı tarafından ayrıca seçilir. Limit dolduğunda farklı ücretli hesaba otomatik geçilmez. Araştırma kaynakları, güvenlik kararları ve kalan kurumsal parçalar: [AI hesapları](ai-accounts.md).
 
 ## Nasıl çalışır
 
@@ -22,7 +30,7 @@ Tek bir kutu: sorunu yaz (ya da mikrofona bas ve konuş), cevabı tablo olarak a
 
 ### Sesli sorgu
 
-Mikrofon düğmesine bas, konuş, tekrar bas: kayıt metne çevrilir ve gönderilir. Ses yalnızca mikrofona bastığında sağlayıcıya gider. OpenRouter'da ses girdili bir model (varsayılan `google/gemini-3.5-flash-lite`), OpenAI'da `gpt-4o-mini-transcribe` kullanılır; modeli Ayarlar'dan değiştirebilirsin.
+Mikrofon düğmesine basıp konuş: sözlerin soru çubuğunda silik taslak olarak görünür; durdurduğunda düzenlenebilir metin olur. Göndermeden sorgulanmaz. Ses yalnızca mikrofonu başlattığında seçtiğin ses sağlayıcısına gider. OpenRouter'da ses girdili model, OpenAI API'de `gpt-4o-mini-transcribe` kullanılır.
 
 ## Veritabanı bağlantısı
 
@@ -68,6 +76,8 @@ Claude Desktop için `claude_desktop_config.json`:
 {"mcpServers": {"niq": {"command": "C:\\yol\\NIQ\\venv\\Scripts\\python.exe", "args": ["C:\\yol\\NIQ\\niq_mcp.py"]}}}
 ```
 Claude Code için: `claude mcp add niq -- C:\yol\NIQ\venv\Scripts\python.exe C:\yol\NIQ\niq_mcp.py`
+
+Ayarlar'daki **MCP ile kullan** bölümünden kendi kurulumuna uygun yapılandırmayı kopyalayabilirsin. Paketli dağıtımda ayrı `NIQ-MCP.exe` stdio sunucusu kullanılır; installer bunu masaüstü exe'siyle birlikte kurar. İstemci kendi modeliyle şemayı okuyup `run_sql` çağırabilir; bu kullanım NIQ AI anahtarı gerektirmez. `ask`, NIQ'de seçilmiş hesabı kullanır.
 
 ## Güvenlik
 
