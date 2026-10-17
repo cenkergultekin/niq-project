@@ -26,10 +26,7 @@
         { name: '/rapor', desc: 'Zamanlanmış rapor ya da uyarı kur', arg: 'ne zaman ne gönderilsin', run: (arg) => plan(arg) },
         { name: '/yeni', desc: 'Yeni konuşma başlat', run: () => newConversation() },
         { name: '/baglan', desc: 'Bağlantı panelini aç', run: () => { NIQ.go('chat'); NIQ.connect.show(); } },
-        { name: '/gecmis', desc: 'Geçmiş sorular', run: () => NIQ.go('history') },
-        { name: '/raporlar', desc: 'Zamanlanmış raporlar ve sonuçlar', run: () => NIQ.go('reports') },
-        { name: '/sozluk', desc: 'İş sözlüğü ve tablo notları', run: () => NIQ.go('glossary') },
-        { name: '/ayarlar', desc: 'AI, bildirim ve diğer ayarlar', run: () => NIQ.go('settings') },
+        { name: '/profil', desc: 'Hesap ve tercihler', run: () => NIQ.go('settings') },
         { name: '/temizle', desc: 'Ekranı temizle (konuşma bağlamı kalır)', run: () => { NIQ.clear(stream); refreshEmpty(); } },
     ];
 
@@ -333,7 +330,7 @@
             el('a', { class: 'btn primary', href: 'https://chatgpt.com/settings/usage', rel: 'noreferrer', text: 'Kullanımı yönet' })));
         if (payload.sql) block.appendChild(el('pre', { class: 'sqlbox', text: payload.sql }));
         if (payload.error_code === 'AI_UNAVAILABLE') {
-            block.appendChild(el('div', { class: 'actions' }, el('button', { class: 'link-btn', text: 'Ayarlar\'a git', onclick: () => NIQ.go('settings') })));
+            block.appendChild(el('div', { class: 'actions' }, el('button', { class: 'link-btn', text: 'Profil', onclick: () => NIQ.go('settings') })));
         }
         if (question && error.status !== 503 && !planLimit) {
             block.appendChild(el('div', { class: 'actions' }, el('button', { class: 'link-btn', text: 'Yeniden dene', onclick: () => ask(question) })));

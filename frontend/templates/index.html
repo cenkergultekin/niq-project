@@ -15,10 +15,10 @@
         <button class="pill" id="conn-pill" title="Veri kaynaklarını yönet"><span id="conn-label">Veri kaynağı seç</span></button>
         <nav class="links" id="links">
             <button class="icon-btn" id="brand" title="Yeni konuşma" aria-label="Yeni konuşma"><svg viewBox="0 0 24 24"><path d="M13 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-7M16 4l4 4M10 14l1-4 8-8 4 4-8 8-5 1z"/></svg></button>
-            <button data-view="history">Geçmiş</button>
-            <button data-view="reports">Raporlar</button>
-            <button data-view="glossary">Sözlük</button>
-            <button data-view="settings">Ayarlar</button>
+            <button data-view="analytics">Analytics</button>
+            <button data-view="monitoring">Monitoring</button>
+            <button data-view="operations">Operations</button>
+            <button class="icon-btn profile-button" data-view="settings" title="Profil" aria-label="Profil"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 21v-2a7 7 0 0 1 14 0v2"/></svg></button>
         </nav>
     </header>
 
@@ -177,7 +177,23 @@
             <div id="stream"></div>
         </section>
 
-        <!-- Geçmiş -->
+        <section class="view workspace-draft analytics-draft" id="view-analytics">
+            <h1>Analytics</h1>
+            <p class="workspace-example">Geçen hafta neden gelirimiz düştü?</p>
+            <p class="note">Bu akış henüz etkin değil.</p>
+        </section>
+        <section class="view workspace-draft monitoring-draft" id="view-monitoring">
+            <h1>Monitoring</h1>
+            <p class="workspace-example">Aktivasyon oranımız normalin altına düştüğünde araştır ve haber ver.</p>
+            <p class="note">Bu akış henüz etkin değil.</p>
+        </section>
+        <section class="view workspace-draft operations-draft" id="view-operations">
+            <h1>Operations</h1>
+            <p class="workspace-example">Ödeme başarısızlığı yaşayan müşterileri bul, durumlarını değerlendir ve destek ekibine bir iş listesi oluştur.</p>
+            <p class="note">Bu akış henüz etkin değil.</p>
+        </section>
+
+        <!-- Existing storage and API views retained while the new workflows are designed. -->
         <section class="view" id="view-history">
             <h1>Geçmiş</h1>
             <p class="lead">Bu bağlantıda sorduğun sorular. Birine tıklayınca sonucu yeniden açılır.</p>
@@ -228,7 +244,7 @@
 
         <!-- Ayarlar -->
         <section class="view" id="view-settings">
-            <h1>Ayarlar</h1>
+            <h1>Profil</h1>
             <h2>AI</h2>
             <div id="ai-accounts">
                 <div class="row access-paths">

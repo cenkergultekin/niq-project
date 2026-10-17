@@ -288,7 +288,7 @@
     }
 
     // ---- açılış ----
-    const VALID_VIEWS = ['chat', 'history', 'reports', 'glossary', 'settings'];
+    const VALID_VIEWS = ['chat', 'analytics', 'monitoring', 'operations', 'settings'];
 
     async function boot() {
         NIQ.chat.bind();

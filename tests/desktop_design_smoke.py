@@ -96,10 +96,16 @@ def main():
                 assert len(loads) == 1, "Focus/restore unexpectedly reloaded the page"
                 assert window.web_view.page().backgroundColor().name() == "#081324"
                 passed.append("minimize-maximize-restore-no-reload-control")
-                QMessageBox.question = staticmethod(lambda *args: QMessageBox.StandardButton.No)
+                def check_dialog():
+                    dialog = window.findChild(QMessageBox, "niq-close-dialog")
+                    assert dialog.button(QMessageBox.StandardButton.Yes).text() == "Kapat"
+                    assert dialog.button(QMessageBox.StandardButton.No).text() == "Vazgeç"
+                    dialog.grab().save(str(home / "close-dialog.png"))
+                    dialog.button(QMessageBox.StandardButton.No).click()
+                QTimer.singleShot(250, check_dialog)
                 window.title_bar.findChild(QPushButton, "close").click()
                 assert window.isVisible(), "Cancelled close hid window"
-                QMessageBox.question = staticmethod(lambda *args: QMessageBox.StandardButton.Yes)
+                window.confirm_close = lambda: True
                 timer.stop()
                 window.title_bar.findChild(QPushButton, "close").click()
                 passed.append("close-cancel-and-confirm")
