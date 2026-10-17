@@ -208,7 +208,12 @@ class NIQDesktopApp(QMainWindow):
             QWidget#titleBar QPushButton#close:hover { background: #b8374f; }
             QMenuBar, QMenu, QStatusBar { background: #081324; color: #a9bddc; }
             QMenuBar::item:selected, QMenu::item:selected { background: #1a3151; }
-            QMessageBox { background: #eef5ff; }
+            QMessageBox { background: #102138; color: #e8f1ff; }
+            QMessageBox QLabel { color: #e8f1ff; font: 14px 'Segoe UI'; }
+            QMessageBox QPushButton { color: #dceaff; background: #1b3552; border: 0; border-radius: 7px; padding: 9px 20px; min-width: 76px; }
+            QMessageBox QPushButton:hover { background: #29496c; }
+            QMessageBox QPushButton:focus { border: 1px solid #8ac4ff; }
+            QMessageBox QPushButton#confirmClose { background: #84b9ff; color: #081a31; }
         """)
         self._build_menu()
         self.menuBar().hide()
@@ -306,12 +311,24 @@ class NIQDesktopApp(QMainWindow):
             "<p>Doğal dilde sorun, salt-okunur ve doğrulanmış T-SQL ile cevap alın.</p>",
         )
 
+    def confirm_close(self) -> bool:
+        dialog = QMessageBox(self)
+        dialog.setObjectName("niq-close-dialog")
+        dialog.setWindowTitle("NIQ’yu kapat")
+        dialog.setText("NIQ’yu kapatmak istiyor musun?")
+        dialog.setIcon(QMessageBox.Icon.NoIcon)
+        dialog.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        dialog.button(QMessageBox.StandardButton.Yes).setText("Kapat")
+        dialog.button(QMessageBox.StandardButton.Yes).setObjectName("confirmClose")
+        dialog.button(QMessageBox.StandardButton.No).setText("Vazgeç")
+        dialog.setDefaultButton(QMessageBox.StandardButton.No)
+        dialog.setEscapeButton(QMessageBox.StandardButton.No)
+        confirmed = dialog.exec() == QMessageBox.StandardButton.Yes
+        dialog.deleteLater()
+        return confirmed
+
     def closeEvent(self, event) -> None:
-        answer = QMessageBox.question(
-            self, "NIQ Kapat", "NIQ uygulamasını kapatmak istediğinizden emin misiniz?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No,
-        )
-        if answer == QMessageBox.StandardButton.Yes:
+        if self.confirm_close():
             if self.dev_view:
                 self.dev_view.close()
             try:

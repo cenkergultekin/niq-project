@@ -90,8 +90,16 @@ Ayarlar'daki **MCP ile kullan** bölümünden kendi kurulumuna uygun yapılandı
 
 ## Kurulum
 
+Yerelde derlenmiş Windows paketlerini yönetici izni olmadan kurmak için:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\install_desktop.ps1 -Launch
+```
+
+`dist/NIQ-Desktop.exe` ve `dist/NIQ-MCP.exe` önce derlenmiş olmalı. Uygulama `%LOCALAPPDATA%/Programs/NIQ` içine kopyalanır; masaüstüne ve Başlat menüsüne **NIQ** kısayolu eklenir. Sonraki açılışlarda kısayola çift tıklamak yeterlidir; Python veya terminal gerekmez.
+
 ### Son kullanıcı
-Release'teki `NIQDesktop_Setup.exe` dosyasını kurun, **Ayarlar** sayfasından sağlayıcıyı seçip API anahtarını girin.
+Kurulumdan sonra masaüstündeki **NIQ** kısayolunu kullanın. İlk açılıştaki ChatGPT veya API bağlantısını tamamlayın; hesap tercihleri profil ikonundan yönetilir.
 
 ### Geliştirici
 ```bash

@@ -340,6 +340,12 @@ body.booting .top, body.booting main, body.booting .dock { visibility: hidden; }
 .model-option small { color: var(--muted); font-size: 11px; }
 .model-option-state { display: inline-flex; align-items: center; gap: 10px; }
 .model-check { color: #d3e3fa; font-size: 16px; }
+.workspace-draft { padding-top: clamp(42px, 12vh, 130px); text-align: center; }
+.workspace-draft h1 { font-size: clamp(32px, 5vw, 48px); letter-spacing: -1.5px; }
+.workspace-example { max-width: 670px; margin: 26px auto 22px; font-family: var(--font-head); font-size: clamp(20px, 3vw, 28px); line-height: 1.6; color: #b9cce7; }
+.monitoring-draft .workspace-example { color: #b9cee9; }
+.operations-draft .workspace-example { color: #c5c9eb; }
+.links .profile-button { margin-left: 10px; }
 
 /* One clear NIQ path, with two independent account alternatives. */
 .access-paths { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }

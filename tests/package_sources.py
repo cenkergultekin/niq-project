@@ -25,9 +25,12 @@ def main():
     desktop = Path(args.exe).stem == "NIQ-Desktop"
     required = ["backend.services.ai_accounts", "backend.services.ai_auth", "backend.services.ai_adapters",
                 "backend.services.ai_service", "backend.core.utils", "backend.config.config",
-                "backend.services.agent_api", "sqlglot.dialects.sqlite", "anthropic", "jwt", "filelock"]
+                "sqlglot.dialects.sqlite", "anthropic", "jwt", "filelock"]
     if desktop:
-        required += ["backend.routes.ai_accounts", "backend.routes.routes", "backend.routes.onboarding", "backend.services.analyst", "app"]
+        required += ["backend.routes.ai_accounts", "backend.routes.routes", "backend.routes.onboarding",
+                     "backend.services.desktop_actions", "backend.services.analyst", "app"]
+    else:
+        required += ["backend.services.agent_api"]
     for name in required:
         if name not in pyz.toc:
             missing.append(name)
