@@ -337,3 +337,41 @@ body.booting .top, body.booting main, body.booting .dock { visibility: hidden; }
 .model-option { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 14px; border: 0; background: transparent; color: var(--text); padding: 10px; text-align: left; border-radius: 8px; font: inherit; cursor: pointer; }
 .model-option:hover, .model-option[aria-selected="true"] { background: rgba(139,177,237,.13); }
 .model-option small { color: var(--muted); font-size: 11px; }
+
+/* One clear NIQ path, with two independent account alternatives. */
+.access-paths { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.access-option { position: relative; display: flex; align-items: center; gap: 18px; min-width: 0; padding: 24px; text-align: left; white-space: normal; border: 0; overflow: hidden; transition: transform .25s ease, background .25s ease, box-shadow .25s ease; }
+.access-logo { flex: none; object-fit: contain; }
+.access-copy { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.access-title { font-family: var(--font-head); font-size: 16px; font-weight: 500; letter-spacing: -.5px; line-height: 1.4; }
+.access-description { font-size: 12px; line-height: 1.6; font-weight: 400; color: #9eafc8; }
+.access-action { margin-left: auto; font-size: 12px; flex: none; color: #d4e6ff; font-weight: 500; }
+.access-option:hover { transform: translateY(-3px); }
+.access-option.plan-choice { grid-column: 1 / -1; background: radial-gradient(ellipse at 10% 30%, #4078c054, transparent 65%), linear-gradient(115deg, #19365e, #102238); box-shadow: 0 14px 50px #010a1b33; min-height: 120px; }
+.access-option.plan-choice:hover { box-shadow: 0 18px 60px #163b763d; }
+.plan-choice .access-title { font-size: 23px; color: #eef5ff; }
+.plan-choice .access-description { color: #b5cbe6; }
+button.access-option.chatgpt-signin { background: #080e18b3; }
+button.access-option.chatgpt-signin:hover { background: #101b2b; }
+.access-option.api-choice { background: #14263b9c; }
+.access-option.api-choice:hover, .access-option.api-choice[aria-expanded="true"] { background: #1a3552; }
+#onboarding-ai #ai-accounts > .access-paths:first-child { display: grid; }
+#onboarding-ai .access-option { justify-content: flex-start; padding: 24px; border-radius: 12px; min-height: 104px; }
+#onboarding-ai .access-option.plan-choice { min-height: 120px; }
+#onboarding-ai .api-key-form { padding-top: 20px; }
+#onboarding-ai .api-key-form .provider-choices { margin-top: 0; }
+#niq-plan { width: min(580px, calc(100% - 32px)); padding: 44px 36px 28px; background: radial-gradient(ellipse at 50% 0, #234c805c, transparent 65%), #0c1a2e; }
+#niq-plan h3 { font-size: clamp(30px, 5vw, 40px); line-height: 1.2; }
+#niq-plan .plan-intro { color: #b6c8df; font-size: 16px; line-height: 1.8; }
+.plan-features { display: flex; justify-content: center; flex-wrap: wrap; gap: 12px 22px; margin: 30px 0; font-size: 13px; color: #d3e2f5; }
+#niq-plan .plan-activate { padding: 15px 20px; min-height: 52px; opacity: .6; cursor: not-allowed; }
+#niq-plan .plan-availability { font-size: 12px; margin: 14px 0 24px; }
+#niq-plan #niq-plan-close { width: auto; margin: 0; padding: 8px 20px; }
+@media (max-width: 640px) {
+  .access-paths { grid-template-columns: minmax(0, 1fr); }
+  .access-action { display: none; }
+  #onboarding-ai .access-option { min-height: 88px; padding: 20px; }
+  #onboarding-ai .access-option.plan-choice { min-height: 112px; }
+  .plan-choice .access-title { font-size: 21px; }
+  #niq-plan { padding: 32px 22px 24px; }
+}

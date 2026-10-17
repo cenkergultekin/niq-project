@@ -61,6 +61,7 @@ def main():
     started, stage, pending = time.monotonic(), 0, False
     checks = []
     plan_checked = False
+    design_stage = 0
 
     def finish(error=None):
         timer.stop()
@@ -69,7 +70,7 @@ def main():
         qt.exit(1 if error else 0)
 
     def result(raw):
-        nonlocal stage, pending, plan_checked
+        nonlocal stage, pending, plan_checked, design_stage
         pending = False
         try:
             data = json.loads(raw or "{}")
@@ -87,6 +88,17 @@ def main():
                     window.web_view.page().runJavaScript("NIQ.$('ai-upgrade').click()")
                     return
                 assert data["plan"]
+                assert data["planWidth"] > 300, str(data)
+                if plan_checked is True:
+                    plan_checked = 'capturing'
+                    def capture_plan():
+                        nonlocal plan_checked
+                        window.grab().save(str(home / 'plan.png'))
+                        plan_checked = 'captured'
+                    QTimer.singleShot(1200, capture_plan)
+                    return
+                if plan_checked == 'capturing':
+                    return
                 checks.append("turkish-options-no-retry-plan-without-login")
                 window.web_view.page().runJavaScript("NIQ.$('niq-plan-close').click()")
                 window.grab().save(str(home / "login.png"))
@@ -94,6 +106,28 @@ def main():
                 js = "NIQ.$('ai-api-toggle').click()"
             elif stage == 1:
                 if not data["keyForm"]:
+                    return
+                if design_stage == 0:
+                    design_stage = 1
+                    return
+                if design_stage == 1:
+                    window.grab().save(str(home / "access-desktop.png"))
+                    window.setMinimumSize(320, 400)
+                    window.resize(390, 844)
+                    design_stage = 2
+                    return
+                if design_stage == 2:
+                    assert not data["overflow"], "Access options overflow at 390px"
+                    design_stage = 21
+                    def capture_mobile():
+                        nonlocal design_stage
+                        window.grab().save(str(home / 'access-mobile.png'))
+                        window.resize(1400, 900)
+                        design_stage = 3
+                    QTimer.singleShot(400, capture_mobile)
+                    checks.append("access-options-plan-and-mobile-layout")
+                    return
+                if design_stage == 21:
                     return
                 assert data["centered"] and data["wideButton"] and data["noContinue"], str(data)
                 window.grab().save(str(home / "api-form.png"))
@@ -144,8 +178,9 @@ def main():
             window.web_view.page().runJavaScript("""JSON.stringify({ready:!!window.NIQ?.onboarding,
                 onboarding:!!window.NIQ?.state.onboarding, account:document.querySelectorAll('.provider-choice').length===7,
                 noContinue:!document.getElementById('onboarding-next'),keyForm:!document.getElementById('ai-key-form')?.hidden,
+                overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+1,
                 noRetry:!document.getElementById('onboarding-retry'),turkish:document.getElementById('ai-chatgpt')?.textContent.includes('ChatGPT ile devam et'),
-                noProviderHeading:!document.getElementById('ai-provider-label'),plan:!!document.getElementById('niq-plan')?.open,
+                noProviderHeading:!document.getElementById('ai-provider-label'),plan:!!document.getElementById('niq-plan')?.open,planWidth:document.getElementById('niq-plan')?.getBoundingClientRect().width,
                 centered:(()=>{const r=document.getElementById('onboarding-account').getBoundingClientRect();return Math.abs(r.x+r.width/2-document.documentElement.clientWidth/2)<3;})(),
                 wideButton:(()=>{const b=document.getElementById('ai-add').getBoundingClientRect(),f=document.getElementById('ai-key-form').getBoundingClientRect();return Math.abs(b.width-f.width)<3;})(),
                 approval:!!document.getElementById('confirm')?.open,models:document.querySelectorAll('.model-option').length,

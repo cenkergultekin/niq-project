@@ -26,7 +26,7 @@
         <section class="view" id="view-onboarding">
             <div id="onboarding-account">
                 <canvas id="onboarding-wordmark" width="480" height="160" role="img" aria-label="NIQ"></canvas>
-                <h1>Hesabını bağla</h1>
+                <h1>Nasıl devam etmek istersin?</h1>
                 <div id="onboarding-ai"></div>
             </div>
             <div id="onboarding-databases" hidden>
@@ -231,10 +231,20 @@
             <h1>Ayarlar</h1>
             <h2>AI</h2>
             <div id="ai-accounts">
-                <div class="row">
-                    <button class="btn chatgpt-signin" id="ai-chatgpt"><img src="/static/images/chatgpt-logo-white.svg" alt="" width="20" height="20">ChatGPT ile devam et</button>
-                    <button class="btn api-choice" id="ai-api-toggle"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="4"/><path d="m11 11 9 9m-3-3 3-3m-6 0 3-3"/></svg>API anahtarı ekle</button>
-                    <button class="btn plan-choice" id="ai-upgrade">Planı yükselt</button>
+                <div class="row access-paths">
+                    <button class="btn access-option plan-choice" id="ai-upgrade" aria-haspopup="dialog">
+                        <img class="access-logo" src="/static/images/niq.png" alt="" width="44" height="44">
+                        <span class="access-copy"><span class="access-title">NIQ ile devam et</span><span class="access-description">Tüm özellikler. Ek hesap veya API anahtarı gerekmez.</span></span>
+                        <span class="access-action">Planı incele</span>
+                    </button>
+                    <button class="btn access-option chatgpt-signin" id="ai-chatgpt">
+                        <img class="access-logo" src="/static/images/chatgpt-logo-white.svg" alt="" width="28" height="28">
+                        <span class="access-copy"><span class="access-title">ChatGPT ile devam et</span><span class="access-description">Kendi ChatGPT planını bağla.</span></span>
+                    </button>
+                    <button class="btn access-option api-choice" id="ai-api-toggle" aria-expanded="false" aria-controls="ai-key-form">
+                        <svg class="access-logo" viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="4"/><path d="m11 11 9 9m-3-3 3-3m-6 0 3-3"/></svg>
+                        <span class="access-copy"><span class="access-title">API anahtarı ekle</span><span class="access-description">Sağlayıcını ve modelini sen seç.</span></span>
+                    </button>
                     <button class="link-btn" id="ai-cancel" hidden>Vazgeç</button>
                 </div>
                 <p class="note" id="ai-login-status" role="status"></p>
@@ -335,12 +345,14 @@
         <div class="row"><a href="https://chatgpt.com/settings/usage" rel="noreferrer">Kullanımı yönet</a><button class="btn primary" id="ai-welcome-dismiss">Tamam</button></div>
     </dialog>
     <div id="toast" hidden></div>
-    <dialog class="confirm" id="niq-plan">
+    <dialog class="confirm" id="niq-plan" aria-labelledby="niq-plan-title">
         <img src="/static/images/niq.png" alt="NIQ" width="64" height="64">
-        <h3>NIQ planı</h3>
-        <p>ChatGPT hesabı veya API anahtarı gerektirmeyen kullanım.</p>
-        <p class="note">Abonelik henüz kullanıma açılmadı.</p>
-        <button class="btn" id="niq-plan-close">Kapat</button>
+        <h3 id="niq-plan-title">Her şey NIQ’da.</h3>
+        <p class="plan-intro">Tek abonelikle tüm özellikler.<br>Model bağlantısını biz hallederiz.</p>
+        <div class="plan-features"><span>Verilerinle sohbet</span><span>Sesli kullanım</span><span>Analiz ve raporlar</span></div>
+        <button class="btn primary plan-activate" disabled>Planı etkinleştir</button>
+        <p class="note plan-availability">Abonelik henüz kullanıma açılmadı.</p>
+        <button class="link-btn" id="niq-plan-close">Geri dön</button>
     </dialog>
 
     <script src="/static/js/core.js"></script>
