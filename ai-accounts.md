@@ -63,3 +63,7 @@ OAuth dönüşü, kod içermeyen süreli sonuç adresine yönlendirilir. Başar�
 Ek sağlayıcıların uçları ve modelleri resmî belgelerden doğrulandı: [Groq uyumluluğu](https://console.groq.com/docs/openai), [Groq modelleri](https://console.groq.com/docs/models), [Mistral geçiş](https://docs.mistral.ai/resources/migration-guides), [DeepSeek](https://api-docs.deepseek.com/). Llama model ailesidir; doğrudan bir abonelik giriş sağlayıcısı olarak gösterilmez.
 
 NIQ Planı yükselt ekranı şimdilik yalnız tanıtım durumudur; ödeme, plan hakkı veya anahtarsız model kullanımı açmaz. Bu kapsam kullanıcı tarafından onaylandı. Giriş başarısızlığında yeniden bağlan düğmesi yerine ChatGPT/API/plan seçenekleri görünür kalır. Üst yenile/F5 kontrolü kaldırıldı.
+
+ChatGPT akışında `response.completed.output` boş gelebiliyor; tamamlanmış öğeler `response.output_item.done` olaylarında toplanır ve yalnız `response.completed` geldikten sonra kullanılır. Bu davranış gerçek hesapla doğrulandı. Akış hatası/kopması tamamlanmış tek öğeyi başarılı yanıt saymaz; reasoning ve function call geçmişi korunur.
+
+Çoklu kaynak seçimindeki JSON şeması diğer görevlerle aynı `name`, `strict`, `schema` sarmalayıcısını kullanır. Ham object şeması Responses `text.format.type` alanını yanlışlıkla `object` yaparak 400 üretiyordu; düzeltildi. Gerçek ChatGPT hesabıyla sentetik kaynak seçimi, SQLite SQL üretimi/salt-okunur sorgu ve function tool dönüşü doğrulandı.

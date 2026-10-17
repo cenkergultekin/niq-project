@@ -36,6 +36,7 @@ def chatgpt_send(client, params):
         functions = [{"type": "function", **t["function"]} for t in params["tools"]]
         body["tools"] = [{"type": "namespace", "name": "niq", "description": "Read-only database analysis", "tools": functions}]
     completed = None
+    streamed_output = {}
     with client.responses.create(**body) as stream:
         for event in stream:
             if event.type in ("response.failed", "response.incomplete", "error"):
@@ -47,10 +48,16 @@ def chatgpt_send(client, params):
                 raise ValidationError("ChatGPT yanıtı tamamlanmadı. Yeniden dene.")
             if event.type == "response.completed":
                 completed = event.response
+            elif event.type == "response.output_item.done":
+                streamed_output[event.output_index] = event.item
     if completed is None:
         raise ValidationError("ChatGPT bağlantısı yanıt tamamlanmadan kesildi. Yeniden dene.")
     content, calls, output = [], [], []
-    for item in completed.output:
+    # Subscription streams may leave the terminal response.output empty. The
+    # finalized items were already delivered in output_item.done events.
+    # Never use those items unless the entire response completed successfully.
+    items = completed.output or [streamed_output[index] for index in sorted(streamed_output)]
+    for item in items:
         raw = item.model_dump(exclude_none=True) if hasattr(item, "model_dump") else dict(item)
         output.append(raw)
         if item.type == "message":

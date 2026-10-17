@@ -341,8 +341,9 @@ class AIService:
         return [str(t) for t in tables][:limit]
 
     def pick_databases(self, question: str, catalog: List[Dict[str, Any]]) -> List[str]:
-        schema = {"type": "object", "properties": {"databases": {"type": "array", "items": {"type": "string"}}},
-                  "required": ["databases"], "additionalProperties": False}
+        schema = {"name": "database_selection", "strict": True, "schema": {
+            "type": "object", "properties": {"databases": {"type": "array", "items": {"type": "string"}}},
+            "required": ["databases"], "additionalProperties": False}}
         prompt = (
             "Choose all databases needed to answer this question using their exact ids. "
             "Use names and table metadata; never ask the user to choose tables. "

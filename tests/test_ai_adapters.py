@@ -71,6 +71,58 @@ def test_completed_chatgpt_structured_text():
     assert calls[0]["text"]["format"] == {"type": "json_schema", **schema}
 
 
+def test_subscription_stream_finalizes_items_before_empty_completed_output():
+    output = [Block(type="reasoning", id="r1", encrypted_content="opaque", summary=[]),
+              Block(type="message", role="assistant", content=[NS(type="output_text", text="ok")])]
+    sdk, _ = client([NS(type="response.output_item.done", output_index=1, item=output[1]),
+                     NS(type="response.output_item.done", output_index=0, item=output[0]),
+                     NS(type="response.completed", response=NS(output=[]))])
+    message = chatgpt_send(sdk, PARAMS).choices[0].message
+    assert message.content == "ok"
+    assert [item["type"] for item in message.response_items] == ["reasoning", "message"]
+    assert message.response_items[0]["encrypted_content"] == "opaque"
+
+
+@pytest.mark.parametrize("terminal", [None, "response.failed", "response.incomplete"])
+def test_finalized_item_without_successful_response_never_unlocks_onboarding(terminal):
+    output = Block(type="message", role="assistant", content=[NS(type="output_text", text="ok")])
+    events = [NS(type="response.output_item.done", output_index=0, item=output)]
+    if terminal:
+        events.append(NS(type=terminal, response=NS(error=NS(code="subscription_sharing_usage_limit_exceeded"))))
+    sdk, _ = client(events)
+    with pytest.raises(ValidationError):
+        chatgpt_send(sdk, PARAMS)
+
+
+def test_completed_snapshot_and_finalized_items_do_not_duplicate_text():
+    output = Block(type="message", role="assistant", content=[NS(type="output_text", text="ok")])
+    sdk, _ = client([NS(type="response.output_item.done", output_index=0, item=output),
+                     NS(type="response.completed", response=NS(output=[output]))])
+    assert chatgpt_send(sdk, PARAMS).choices[0].message.content == "ok"
+
+
+def test_subscription_function_call_is_preserved_with_empty_terminal_output():
+    call = Block(type="function_call", call_id="c1", name="run_sql", arguments='{"sql":"SELECT 1"}', namespace="niq")
+    sdk, _ = client([NS(type="response.output_item.done", output_index=0, item=call),
+                     NS(type="response.completed", response=NS(output=[]))])
+    message = chatgpt_send(sdk, {**PARAMS, "tools": [TOOL]}).choices[0].message
+    assert message.tool_calls[0].function.name == "run_sql"
+    assert message.response_items[0]["call_id"] == "c1"
+
+
+def test_database_selection_passes_named_json_schema_to_provider(monkeypatch):
+    from backend.services.ai_adapters import completion
+    from backend.services.ai_service import AIService
+    service = AIService(config={"provider": "chatgpt", "api_key": "synthetic", "model": "model",
+                                "base_url": "https://api.openai.com/v1", "max_output_tokens": 2048})
+    sent = []
+    monkeypatch.setattr(service, "_send", lambda params: sent.append(params) or completion('{"databases":["sales"]}'))
+    assert service.pick_databases("Sipariş sayısı", [{"id": "sales", "tables": ["orders"]}]) == ["sales"]
+    schema = sent[0]["response_format"]["json_schema"]
+    assert schema["name"] == "database_selection" and schema["strict"]
+    assert schema["schema"]["type"] == "object" and "type" not in schema
+
+
 def test_completed_refusal_is_not_empty_success():
     output = [Block(type="message", role="assistant", content=[NS(type="refusal", refusal="No")])]
     sdk, _ = client([NS(type="response.completed", response=NS(output=output))])
