@@ -45,6 +45,7 @@ exe = EXE(
     a.datas,
     [],
     name='NIQ-Desktop',
+    icon='frontend/static/images/niq.ico',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

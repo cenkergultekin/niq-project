@@ -18,6 +18,8 @@ RequestExecutionLevel admin
 SetCompressor /SOLID lzma
 
 !define MUI_ABORTWARNING
+!define MUI_ICON "frontend\static\images\niq.ico"
+!define MUI_UNICON "frontend\static\images\niq.ico"
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_LICENSE "LICENSE.txt"
 !insertmacro MUI_PAGE_DIRECTORY

@@ -308,6 +308,19 @@ class AIService:
         tables = data.get("tables") if isinstance(data.get("tables"), list) else []
         return [str(t) for t in tables][:limit]
 
+    def pick_databases(self, question: str, catalog: List[Dict[str, Any]]) -> List[str]:
+        schema = {"type": "object", "properties": {"databases": {"type": "array", "items": {"type": "string"}}},
+                  "required": ["databases"], "additionalProperties": False}
+        prompt = (
+            "Choose all databases needed to answer this question using their exact ids. "
+            "Use names and table metadata; never ask the user to choose tables. "
+            "If several databases contain the requested business data and no specific database is named, include all relevant ones. "
+            "For a follow-up, preserve the relevant database scope. Return JSON {\"databases\":[\"id\"]}.\n"
+            f"Question: {question}\nCatalog: {json.dumps(catalog, ensure_ascii=False)}"
+        )
+        data = _extract_json(self._complete([{"role": "user", "content": prompt}], schema)) or {}
+        return [str(value) for value in data.get("databases", []) if isinstance(value, str)]
+
     # --- sonuç yorumu (isteğe bağlı) -------------------------------------
     def analyze_results(self, question: str, sql: str, rows: List[Dict[str, Any]]) -> Optional[Dict[str, str]]:
         """İlk 20 satırı özetletir. Çağıran yalnızca kullanıcı açıkça izin verdiyse çağırır."""

@@ -1,6 +1,7 @@
 """
 HTTP API: bağlantı, tablolar, doğal dil sorgusu, geçmiş, ayarlar ve sağlık.
 """
+import hashlib
 import logging
 import threading
 from dataclasses import asdict, replace
@@ -15,7 +16,9 @@ from backend.core.approval import ApprovalRequired, require_approval
 from backend.core.sql_guard import validate_sql
 from backend.core.utils import ResponseFormatter, StringUtils, ValidationError
 from backend.db import diagnostics
+from backend.db.catalog import collect_catalog
 from backend.db.connector import Connector, friendly_error
+from backend.db.demo import demo_database
 from backend.db.dialects import DIALECTS, driver_available
 from backend.db.profiles import (
     OPTION_KEYS,
@@ -27,6 +30,7 @@ from backend.db.profiles import (
     set_password,
     set_ssh_secret,
 )
+from backend.db.sources import ConnectionGrants, read_docker_connection, selected_docker_source
 from backend.db.tunnel import HostKeyUnknown
 from backend.services import exporter, models_catalog, notify
 from backend.services.ai_service import AIService, AIServiceError, AIUnavailableError
@@ -38,6 +42,7 @@ from backend.services.profiler import profile_database
 from backend.services.query_service import ConversationStore, run_question, suggest_tables
 from backend.services.schedule import parse_schedule, validate_schedule
 from backend.services.suggestions import build_suggestions
+from backend.services.workspace import query_workspace
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +59,8 @@ class AppState:
         self.connector: Optional[Connector] = None
         self.ai_service = AIService()
         self.profiles = ProfileStore()
+        self.connection_grants = ConnectionGrants()
+        self.workspace = {}
         self._history: Optional[HistoryStore] = None
         self._knowledge: Optional[KnowledgeStore] = None
         self.conversations = ConversationStore()
@@ -104,6 +111,7 @@ class AppState:
             probe.close()
         if not ok_:
             raise ValidationError("Bağlantı kurulamadı. Ayrıntı için 'Test' adımını çalıştırın.")
+        self.close_workspace()
         if self.connector:
             self.connector.close()
         self.connector = Connector(profile, password=password, ssh_secret=ssh_secret, trust_ssh_host=trust_ssh_host)
@@ -127,9 +135,54 @@ class AppState:
     def disconnect(self) -> None:
         session.pop("PROFILE", None)
         Settings.save({"last_connection_id": ""})
+        self.close_workspace()
         if self.connector:
             self.connector.close()
             self.connector = None
+
+    def close_workspace(self):
+        for item in self.workspace.values():
+            item["connector"].close()
+        self.workspace = {}
+
+    def connect_scope(self, tokens):
+        if not isinstance(tokens, list) or not tokens or not all(isinstance(token, str) for token in tokens):
+            raise ValidationError("En az bir veritabanı seç.")
+        prepared = {}
+        try:
+            for token in dict.fromkeys(tokens):
+                profile, password = self.connection_grants.resolve(token, {})
+                connector = Connector(profile, password=password)
+                try:
+                    tables = connector.get_tables()
+                except Exception:
+                    connector.close()
+                    raise ValidationError(f"{profile.name} bağlantısı kurulamadı; kaynakları yeniden bul.") from None
+                key = hashlib.sha256(profile.key.encode()).hexdigest()[:16]
+                if key in prepared:
+                    prepared[key]["connector"].close()
+                prepared[key] = {"connector": connector, "tables": tables, "label": profile.name}
+        except Exception:
+            for item in prepared.values():
+                item["connector"].close()
+            raise
+        self.close_workspace()
+        if self.connector:
+            self.connector.close()
+        self.workspace = prepared
+        self.connector = next(iter(prepared.values()))["connector"]
+        session["PROFILE"] = asdict(self.connector.profile)
+        Settings.save({"last_connection_id": ""})
+
+    def public_profile(self):
+        if not self.connector:
+            return None
+        return {**self.connector.profile.public(), "scope_count": len(self.workspace) or 1,
+                "scope_names": [item["label"] for item in self.workspace.values()]}
+
+    def query_owner(self, query_id):
+        connectors = [item["connector"] for item in self.workspace.values()] or [self.manager()]
+        return next((conn for conn in connectors if self.history.get(conn.db_key, query_id)), None)
 
 
 state = AppState()
@@ -175,6 +228,11 @@ def _unexpected_error(exc: Exception) -> Tuple[Any, int]:
 def _profile_from_body(data: Dict[str, Any]) -> Tuple[Profile, str]:
     """İstekten profil ve parola çıkarır. 'connection_input' (URL/ODBC/yol) alanları doldurur."""
     merged = dict(data)
+    if data.get("credential_token"):
+        try:
+            return state.connection_grants.resolve(data["credential_token"], data)
+        except ValueError as exc:
+            raise ValidationError(str(exc)) from exc
     password = merged.get("password") or merged.get("pwd") or ""
     raw = merged.get("connection_input") or merged.get("db_conn_str")
     if raw:
@@ -218,7 +276,44 @@ def db_types():
 
 @api_bp.route("/db/discover", methods=["GET"])
 def db_discover():
-    return jsonify(ok(diagnostics.discover()))
+    return jsonify(ok(diagnostics.discover(state.profiles)))
+
+
+@api_bp.route("/db/demo", methods=["POST"])
+def connect_demo_database():
+    """Kullanıcının seçtiği sentetik SQLite örneğini açar; profil/parola kaydetmez."""
+    profile = Profile(type="sqlite", name="Örnek satışlar", database=str(demo_database()))
+    state.connect(profile, None)
+    return jsonify(ok(profile.public()))
+
+
+@api_bp.route("/db/prepare", methods=["POST"])
+def prepare_local_source():
+    data = _body()
+    try:
+        source = selected_docker_source(str(data.get("source_id", "")))
+        require_approval(data, "read_connection_credentials", source["name"])
+        profile, password = read_docker_connection(source)
+    except (ValueError, OSError) as exc:
+        raise ValidationError(str(exc)) from exc
+    token = state.connection_grants.issue(profile, password)
+    return jsonify(ok({"profile": profile.public(), "credential_token": token, "needs_password": not bool(password)}))
+
+
+@api_bp.route("/db/catalog", methods=["POST"])
+def database_catalog():
+    data = _body()
+    require_approval(data, "discover_database_catalog")
+    return jsonify(ok(collect_catalog(state.profiles, state.connection_grants)))
+
+
+@api_bp.route("/db/scope", methods=["POST"])
+def set_database_scope():
+    try:
+        state.connect_scope(_body().get("databases"))
+    except ValueError as exc:
+        raise ValidationError(str(exc)) from exc
+    return jsonify(ok(state.public_profile()))
 
 
 @api_bp.route("/db/parse", methods=["POST"])
@@ -384,7 +479,13 @@ def execute_query():
     mode = data.get("mode", "auto")
     analyze = mode == "analyze" or (mode == "auto" and not tables and is_analytical(question))
     try:
-        if analyze:
+        if state.workspace:
+            if analyze and not Settings.load()["ai_analysis"]:
+                require_approval(data, "enable_ai_analysis")
+                Settings.save({"ai_analysis": True})
+            payload, status = query_workspace(state.workspace, state.ai_service, state.history, state.knowledge,
+                                              state.conversations, question, conversation_id, analyze)
+        elif analyze:
             # Çok adımlı analiz sonuç satırlarını modele gönderir: açık izin gerekir (kritik adım)
             if not Settings.load()["ai_analysis"]:
                 require_approval(data, "enable_ai_analysis")
@@ -445,13 +546,19 @@ def reset_conversation(conversation_id: str):
 def get_saved_queries():
     limit = min(max(request.args.get("limit", 50, type=int), 1), 100)
     offset = max(request.args.get("offset", 0, type=int), 0)
+    if state.workspace:
+        queries = [{**q.to_dict(), "source": item["label"]} for item in state.workspace.values()
+                   for q in state.history.list(item["connector"].db_key, limit + offset)]
+        queries.sort(key=lambda q: q["id"], reverse=True)
+        return jsonify(ok(queries[offset:offset + limit]))
     queries = state.history.list(state.manager().db_key, limit, offset)
     return jsonify(ok([q.to_dict() for q in queries]))
 
 
 @api_bp.route("/queries/<int:query_id>", methods=["GET"])
 def get_saved_query(query_id: int):
-    query = state.history.get(state.manager().db_key, query_id)
+    owner = state.query_owner(query_id)
+    query = state.history.get(owner.db_key, query_id) if owner else None
     if not query:
         return jsonify(fail(f"Sorgu #{query_id} bulunamadı.")), 404
     return jsonify(ok(query.to_dict()))
@@ -459,7 +566,8 @@ def get_saved_query(query_id: int):
 
 @api_bp.route("/queries/<int:query_id>", methods=["DELETE"])
 def delete_saved_query(query_id: int):
-    if not state.history.delete(state.manager().db_key, query_id):
+    owner = state.query_owner(query_id)
+    if not owner or not state.history.delete(owner.db_key, query_id):
         return jsonify(fail(f"Sorgu #{query_id} bulunamadı.")), 404
     return jsonify(ok(None, f"Sorgu #{query_id} başarıyla silindi."))
 
@@ -516,7 +624,8 @@ def run_profile():
 def verify_query(query_id: int):
     """'Bu doğru' işareti: doğrulanmış sorular sonraki sorularda öncelikli örnek olur."""
     verified = bool((request.get_json(silent=True) or {}).get("verified", True))
-    if not state.history.set_verified(state.manager().db_key, query_id, verified):
+    owner = state.query_owner(query_id)
+    if not owner or not state.history.set_verified(owner.db_key, query_id, verified):
         return jsonify(fail(f"Sorgu #{query_id} bulunamadı.")), 404
     return jsonify(ok({"verified": verified}))
 
@@ -524,7 +633,9 @@ def verify_query(query_id: int):
 @api_bp.route("/queries/<int:query_id>", methods=["PUT"])
 def edit_query(query_id: int):
     """Kullanıcı SQL'i düzeltir: aynı güvenlik katmanıyla çalıştırılır, çalışırsa doğrulanmış örnek olur."""
-    connector = state.manager()
+    connector = state.query_owner(query_id)
+    if not connector:
+        return jsonify(fail("Sorgu bulunamadı.")), 404
     sql = str(_body().get("sql", "")).strip()
     existing = state.history.get(connector.db_key, query_id)
     if not existing:
@@ -554,6 +665,9 @@ def export_results():
         raise ValidationError("Biçim csv veya xlsx olmalı")
     sql = str(data.get("sql", "")).strip()
     if data.get("query_id"):
+        connector = state.query_owner(int(data["query_id"]))
+        if not connector:
+            return jsonify(fail("Sorgu bulunamadı.")), 404
         saved = state.history.get(connector.db_key, int(data["query_id"]))
         if not saved:
             return jsonify(fail("Sorgu bulunamadı.")), 404
@@ -813,7 +927,7 @@ def health_check():
     session_profile = session.get("PROFILE")
     current = state.connector.profile if state.connector else (Profile.from_dict(session_profile) if session_profile else None)
     return jsonify(ok({
-        "profile": current.public() if current else None,
+        "profile": state.public_profile() if state.connector else (current.public() if current else None),
         "status": "healthy",
         "database_connected": bool(state.connector or session.get("PROFILE")),
         "ai_service_available": ai.ai_available,

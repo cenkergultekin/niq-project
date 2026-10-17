@@ -129,7 +129,8 @@ def build_url(dialect_id: str, host: str = "", port: Optional[int] = None, datab
         except ImportError:
             pass  # Sürücü eksikliğini teşhis adımı açıklar.
         driver = ODBCUtils.pick_driver(options.pop("driver", None))
-        server = host if "\\" in host or not port else f"{host},{port}"
+        connect_host = "127.0.0.1" if host.lower() == "localhost" else host
+        server = connect_host if "\\" in connect_host or not port else f"{connect_host if connect_host.lower().startswith('tcp:') else 'tcp:' + connect_host},{port}"
         def odbc_value(value):
             return "{" + value.replace("}", "}}") + "}"
 

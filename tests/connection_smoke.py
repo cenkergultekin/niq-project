@@ -23,10 +23,14 @@ def main():
     from sqlalchemy import create_engine, text
 
     import main_desktop
+    from backend.db import diagnostics
     from backend.db.dialects import build_url
     from backend.routes.routes import state
 
     manifest = json.loads((Path(tempfile.gettempdir()) / "niq-local-test-servers.json").read_text())
+    docker_servers = diagnostics._docker_servers
+    diagnostics._docker_servers = lambda: [source for source in docker_servers() if source["name"].startswith("niq-local-")]
+    diagnostics._sql_instances = lambda: []
     servers = []
     for key, raw in manifest.items():
         host, port, database, user, password = raw.split(":", 4)
@@ -59,6 +63,9 @@ def main():
         def generate_sql(self, *args, **kwargs):
             return {"sql": "SELECT COUNT(*) AS total FROM smoke_orders", "explanation": "Sipariş sayısı"}
 
+        def pick_databases(self, question, catalog):
+            return [item["id"] for item in catalog]
+
     state.ai_service = AI()
     qt = QApplication(sys.argv[:1])
     window = main_desktop.NIQDesktopApp()
@@ -70,22 +77,26 @@ def main():
     (async () => {
       const results = [];
       const wait = async (check) => {
-        for (let i=0;i<100;i++) { if(check()) return; await new Promise(r=>setTimeout(r,100)); }
+        for (let i=0;i<300;i++) { if(check()) return; await new Promise(r=>setTimeout(r,100)); }
         throw Error('UI step timeout: '+NIQ.$('db-status').textContent);
       };
       const assert = (ok, message) => { if(!ok) throw Error(message); };
       try {
+        await wait(()=>!NIQ.$('db-source-file-btn').hidden);
         for (const server of SERVERS) {
           NIQ.connect.show();
+          NIQ.$('db-manual-source').open=true;
           NIQ.$('db-status').textContent='';
           NIQ.$('db_paste').value=server.uri;
           NIQ.$('db_paste').dispatchEvent(new Event('change'));
           await wait(()=>NIQ.$('db-status').textContent.startsWith('Alanlar dolduruldu'));
+          assert(!NIQ.$('db-access-panel').hidden,'Access step missing');
           if(server.name!=='SQLITE') {
             NIQ.$('db_database').value='does_not_exist';
             NIQ.$('db_database').dispatchEvent(new Event('input'));
             NIQ.$('db-test-btn').click();
             await wait(()=>NIQ.$('db-status').textContent.startsWith('Test başarısız'));
+            NIQ.$('db-edit-btn').click();
             NIQ.$('db-list-btn').click();
             await wait(()=>NIQ.$('db-status').textContent.includes('veritabanı bulundu'));
             NIQ.$('db-list-select').value=server.database;
@@ -99,6 +110,7 @@ def main():
           await NIQ.chat.ask('Kaç sipariş var?');
           assert(NIQ.$('stream').querySelector('td')?.textContent==='3', 'Wrong SQL result');
           NIQ.connect.show();
+          document.querySelector('[data-connect-step="check"]').click();
           NIQ.$('db-save-btn').click();
           await wait(()=>NIQ.$('confirm').open);
           NIQ.$('confirm-no').click();
@@ -108,6 +120,37 @@ def main():
           await wait(()=>!NIQ.state.connected);
           results.push(server.name);
         }
+        NIQ.connect.show();
+        NIQ.$('db-catalog-btn').click();
+        await wait(()=>NIQ.$('confirm').open);
+        NIQ.$('confirm-yes').click(); // İzole test app'i; yalnızca niq-local-* sentetik kapsayıcıları.
+        await wait(()=>!NIQ.$('db-catalog-panel').hidden);
+        assert(NIQ.$('db-catalog-count').textContent.startsWith('3 platformda'),'Wrong platform count');
+        document.querySelector('[data-scope-mode="all"]').click();
+        let entries=[...document.querySelectorAll('.db-catalog-item input')];
+        assert(entries.length>=4 && entries.every(c=>c.checked),'All scope did not select all');
+        document.querySelector('[data-scope-mode="custom"]').click();
+        entries=[...document.querySelectorAll('.db-catalog-item input')];
+        let chosen=0;
+        for(const checkbox of entries) {
+          const keep=checkbox.closest('label').textContent.includes('niq_it') && chosen<2;
+          if(keep)chosen++;
+          if(checkbox.checked!==keep)checkbox.click();
+        }
+        NIQ.$('db-scope-connect-btn').click();
+        await wait(()=>NIQ.state.profile?.scope_count===2 && NIQ.$('connect').hidden);
+        await NIQ.chat.ask('Kaç sipariş var?');
+        assert(NIQ.$('stream').querySelectorAll('tbody tr').length===2,'Selected DB routing did not return both sources');
+        await NIQ.views.history.enter();
+        assert(![...NIQ.$('history-list').querySelectorAll('button')].some(b=>['Aç','Tekrar sor'].includes(b.textContent)),'Old unclear history actions');
+        NIQ.$('history-list').querySelector('.item-actions button').click();
+        assert(NIQ.$('q').value==='Kaç sipariş var?','Edit action did not prepare draft');
+        results.push('CATALOG_SCOPE_HISTORY');
+        NIQ.connect.show();
+        NIQ.$('db-demo-btn').click();
+        await wait(()=>NIQ.state.profile?.name==='Örnek satışlar');
+        assert((await NIQ.api('/tables')).data.length===4,'Demo did not connect');
+        results.push('DEMO');
         document.querySelector('[data-type="mssql"]').click();
         NIQ.$('db_password').value='stale'; NIQ.$('db_ssh_host').value='stale'; NIQ.$('db_driver').value='stale';
         document.querySelector('[data-type="sqlite"]').click();

@@ -130,7 +130,7 @@
         NIQ.state.profile = profile || null;
         const label = $('conn-label');
         $('conn-dot').classList.toggle('on', !!profile);
-        label.textContent = profile ? (profile.name || profile.database || 'Bağlı') : 'Bağlı değil';
+        label.textContent = profile ? (profile.scope_count > 1 ? `${profile.scope_count} veritabanı bağlı` : profile.name || profile.database || 'Bağlı') : 'Bağlı değil';
         $('db-close-btn').hidden = !profile;
         if (NIQ.chat) NIQ.chat.onConnectionChange();
     };

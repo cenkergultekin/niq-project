@@ -202,8 +202,9 @@ class Connector:
     def list_databases(self) -> List[str]:
         """Sunucudaki veritabanı adları (dosya tabanlı türlerde boş)."""
         queries = {
-            "mssql": "SELECT name FROM sys.databases WHERE state = 0 AND database_id > 4 ORDER BY name",
-            "postgresql": "SELECT datname FROM pg_database WHERE NOT datistemplate AND datallowconn ORDER BY datname",
+            "mssql": "SELECT name FROM sys.databases WHERE state = 0 AND database_id > 4 AND HAS_DBACCESS(name) = 1 ORDER BY name",
+            "postgresql": "SELECT datname FROM pg_database WHERE NOT datistemplate AND datallowconn "
+                          "AND has_database_privilege(datname, 'CONNECT') ORDER BY datname",
             "mysql": "SELECT schema_name FROM information_schema.schemata "
                      "WHERE schema_name NOT IN ('information_schema','performance_schema','mysql','sys') ORDER BY 1",
         }

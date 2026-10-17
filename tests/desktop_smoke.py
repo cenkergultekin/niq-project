@@ -93,6 +93,8 @@ def main():
         window.web_view.page().runJavaScript("JSON.stringify({ready:!!window.NIQ?.connect && "
                                             "document.querySelectorAll('#db-types button').length===4, connected:!!window.NIQ?.state.connected, "
                                             "recording:!!window.NIQ?.voice.recording, text:document.getElementById('stream')?.innerText, "
+                                            "draft:document.getElementById('q')?.value, ghost:document.getElementById('q')?.classList.contains('voice-draft'), "
+                                            "micBusy:document.getElementById('mic')?.disabled, "
                                             "toasts:document.getElementById('toasts')?.innerText})", observed)
 
     def observed(raw):
@@ -113,10 +115,19 @@ def main():
         elif phase == "microphone" and observed_["recording"]:
             phase = "recording"
             if not args.real_mic:
-                QTimer.singleShot(2000, lambda: window.web_view.page().runJavaScript("document.getElementById('mic').click()"))
-        elif phase == "recording" and evidence["queried"] and "3" in (observed_.get("text") or ""):
+                QTimer.singleShot(4000, lambda: window.web_view.page().runJavaScript("document.getElementById('mic').click()"))
+        elif phase == "recording" and observed_["recording"] and observed_.get("draft") == "Kaç sipariş var?":
+            evidence["live_preview"] = observed_.get("ghost") is True
+            assert not evidence["queried"], "dikte kendiliğinden gönderildi"
+        elif phase == "recording" and not observed_["recording"] and observed_.get("draft") == "Kaç sipariş var?" and not observed_.get("micBusy"):
+            evidence["draft_ready"] = not observed_.get("ghost")
+            evidence["no_auto_send"] = not evidence["queried"]
+            phase = "sending"
+            window.web_view.page().runJavaScript("document.getElementById('send').click()")
+        elif phase == "sending" and evidence["queried"] and "3" in (observed_.get("text") or ""):
             evidence["track_released"] = not observed_["recording"]
-            finish(0 if evidence["transcribed"] and evidence["permissions"] and evidence["track_released"] else 1)
+            finish(0 if evidence["transcribed"] and evidence["permissions"] and evidence["track_released"]
+                   and evidence.get("live_preview") and evidence.get("draft_ready") and evidence.get("no_auto_send") else 1)
 
     timer = QTimer()
     timer.timeout.connect(poll)
