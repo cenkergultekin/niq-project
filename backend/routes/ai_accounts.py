@@ -71,7 +71,7 @@ def validate_key_account(data):
     provider = data.get("provider")
     info = ACCOUNT_PROVIDERS.get(provider, {})
     if not info.get("simple"):
-        raise ValidationError("OpenAI, Anthropic, OpenRouter veya Gemini seç.")
+        raise ValidationError("Listeden bir AI sağlayıcısı seç.")
     key = str(data.get("api_key") or "").strip()
     if not key:
         raise ValidationError("API anahtarını gir.")

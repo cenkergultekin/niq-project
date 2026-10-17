@@ -25,6 +25,9 @@ ChatGPT girişi ses transkripsiyonunu kapsamaz. Ses için ayrıca OpenAI API/Ope
 | OpenAI | API anahtarı | OpenAI API projesi |
 | Anthropic | API anahtarı, native Messages SDK | Claude Console API bakiyesi |
 | Gemini | API anahtarı | Google AI API hesabı |
+| Groq · Llama | API anahtarı | Groq hesabı |
+| Mistral | API anahtarı | Mistral hesabı |
+| DeepSeek | API anahtarı | DeepSeek hesabı |
 | Azure OpenAI | Yönetici tarafından önceden yapılandırılmış kaynak + API anahtarı | Azure kaynağı |
 | OpenAI uyumlu | HTTPS adresi, anahtar ve model | Seçilen sunucunun hesabı |
 | Yerel | Loopback adresi ve model | Yerel model |
@@ -56,3 +59,7 @@ Sentetik imzalı OIDC, PKCE, replay/expiry/denial, eksik plan izni, yanlış sub
 [Nous Portal](https://hermes-agent.nousresearch.com/docs/integrations/nous-portal), Hermes için abonelik/OAuth sunuyor; bu belge NIQ adına üçüncü taraf kayıt/izin koşullarını tek başına kanıtlamıyor. Hermes client ID'si kopyalanmadı. Ek abonelik sağlayıcıları kendi kayıt/izin koşullarıyla değerlendirilecek. Microsoft Entra ID ve merkezi kurum politikaları ayrı genişletmelerdir. DB entegrasyon CI işi kapsam dışıdır.
 
 OAuth dönüşü, kod içermeyen süreli sonuç adresine yönlendirilir. Başarı/hata sayfası yerel fontlar ve NIQ/sağlayıcı logolarıyla responsive gösterilir. İlk hesap ekranında ortalanmış piksel NIQ yazısı, sönümlenen imleç etkileşimi ve yavaş lacivert akış vardır; hareket azaltma tercihi desteklenir.
+
+Ek sağlayıcıların uçları ve modelleri resmî belgelerden doğrulandı: [Groq uyumluluğu](https://console.groq.com/docs/openai), [Groq modelleri](https://console.groq.com/docs/models), [Mistral geçiş](https://docs.mistral.ai/resources/migration-guides), [DeepSeek](https://api-docs.deepseek.com/). Llama model ailesidir; doğrudan bir abonelik giriş sağlayıcısı olarak gösterilmez.
+
+NIQ Planı yükselt ekranı şimdilik yalnız tanıtım durumudur; ödeme, plan hakkı veya anahtarsız model kullanımı açmaz. Bu kapsam kullanıcı tarafından onaylandı. Giriş başarısızlığında yeniden bağlan düğmesi yerine ChatGPT/API/plan seçenekleri görünür kalır. Üst yenile/F5 kontrolü kaldırıldı.

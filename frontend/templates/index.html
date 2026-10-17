@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="/static/css/niq.css?v=6.2">
     <script src="/static/vendor/chart.umd.min.js"></script>
 </head>
-<body>
+<body class="booting">
     <div class="ambient" aria-hidden="true"><i></i><i></i><i></i></div>
     <header class="top">
         <button class="pill" id="conn-pill" title="Veri kaynaklarını yönet"><span id="conn-label">Veri kaynağı seç</span></button>
@@ -28,7 +28,6 @@
                 <canvas id="onboarding-wordmark" width="480" height="160" role="img" aria-label="NIQ"></canvas>
                 <h1>Hesabını bağla</h1>
                 <div id="onboarding-ai"></div>
-                <button class="btn primary" id="onboarding-retry" hidden>Yeniden bağlan</button>
             </div>
             <div id="onboarding-databases" hidden>
                 <h1>Veritabanı erişimi</h1>
@@ -233,8 +232,9 @@
             <h2>AI</h2>
             <div id="ai-accounts">
                 <div class="row">
-                    <button class="btn chatgpt-signin" id="ai-chatgpt"><img src="/static/images/chatgpt-logo-white.svg" alt="" width="20" height="20">Continue with ChatGPT</button>
+                    <button class="btn chatgpt-signin" id="ai-chatgpt"><img src="/static/images/chatgpt-logo-white.svg" alt="" width="20" height="20">ChatGPT ile devam et</button>
                     <button class="btn api-choice" id="ai-api-toggle"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="4"/><path d="m11 11 9 9m-3-3 3-3m-6 0 3-3"/></svg>API anahtarı ekle</button>
+                    <button class="btn plan-choice" id="ai-upgrade">Planı yükselt</button>
                     <button class="link-btn" id="ai-cancel" hidden>Vazgeç</button>
                 </div>
                 <p class="note" id="ai-login-status" role="status"></p>
@@ -251,7 +251,7 @@
                     <button class="link-btn" id="ai-disconnect">Çıkış yap</button>
                 </div>
                 <div id="ai-key-form" class="api-key-form" hidden>
-                    <div class="field"><label id="ai-provider-label">Sağlayıcı</label><div id="ai-providers" class="provider-choices" role="group" aria-labelledby="ai-provider-label"></div><input type="hidden" id="ai-new-provider"></div>
+                    <div class="field"><div id="ai-providers" class="provider-choices" role="group" aria-label="AI sağlayıcısı"></div><input type="hidden" id="ai-new-provider"></div>
                     <div class="field"><label for="ai-new-label">İsim</label><input id="ai-new-label" placeholder="İş hesabım" autocomplete="off"></div>
                     <div class="field"><label for="ai-new-key">API anahtarı</label><input type="password" id="ai-new-key" autocomplete="off" placeholder="API anahtarını gir"></div>
                     <button class="btn primary" id="ai-add">Bağlan</button>
@@ -335,6 +335,13 @@
         <div class="row"><a href="https://chatgpt.com/settings/usage" rel="noreferrer">Kullanımı yönet</a><button class="btn primary" id="ai-welcome-dismiss">Tamam</button></div>
     </dialog>
     <div id="toast" hidden></div>
+    <dialog class="confirm" id="niq-plan">
+        <img src="/static/images/niq.png" alt="NIQ" width="64" height="64">
+        <h3>NIQ planı</h3>
+        <p>ChatGPT hesabı veya API anahtarı gerektirmeyen kullanım.</p>
+        <p class="note">Abonelik henüz kullanıma açılmadı.</p>
+        <button class="btn" id="niq-plan-close">Kapat</button>
+    </dialog>
 
     <script src="/static/js/core.js"></script>
     <script src="/static/js/atmosphere.js"></script>

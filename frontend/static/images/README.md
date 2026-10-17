@@ -9,3 +9,5 @@ Generated with the built-in imagegen tool, then edited with the same tool. Qt pr
 Final edit prompt:
 
 > Edit this NIQ desktop app icon. Preserve the exact white n-shaped monogram and square composition. Darken the rounded tile significantly to rich deep midnight navy #071b3b with a restrained cobalt #123e79 gradient at the upper left. Remove the bright cyan glowing rim and scattered edge noise: make the silhouette crisp, smooth and clean with transparent pixels outside the rounded tile. Monogram stays soft white #edf5ff, very legible at tiny sizes. Premium understated nighttime app icon. No added text or elements.
+
+Additional provider marks: Groq from https://console.groq.com/favicon.ico?cache=rounded-bolt; Mistral from https://docs.mistral.ai/favicons/favicon-32x32.png; DeepSeek from https://api-docs.deepseek.com/img/favicon.svg. Downloaded 2026-10-17 from official documentation sites.

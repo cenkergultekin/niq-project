@@ -6,7 +6,7 @@ Doğal dil sorularını SQL Server, PostgreSQL, MySQL/MariaDB ve SQLite üzerind
 
 İlk açılışta **Continue with ChatGPT** veya **API anahtarı ekle** seçilir. Giriş zorunludur; doğrulanan bağlantı başarı mesajından sonra otomatik olarak veritabanı izin ekranına ilerler. ChatGPT'nin yerel açık kaynak uygulamalar için resmî akışı kullanılır; plan uygunluğu sağlayıcıda belirlenir.
 
-API formunda yalnızca logolu sağlayıcı seçimi, isim ve anahtar vardır: OpenAI, Anthropic, OpenRouter ve Gemini. Aynı sağlayıcıya birden fazla hesap eklenebilir. Azure seçeneği, yönetici `AZURE_OPENAI_ENDPOINT` ve `AZURE_OPENAI_DEPLOYMENT` değerlerini önceden tanımladıysa görünür. Anahtar doğrulanmadan kaydedilmez; işletim sisteminin güvenli kasasında tutulur. Model sohbet çubuğundan seçilir; erişilebiliyorsa önerilen Luna varsayılandır.
+API formunda yalnızca logolu sağlayıcı seçimi, isim ve anahtar vardır: OpenAI, Anthropic, OpenRouter, Gemini, Groq (Llama), Mistral ve DeepSeek. Aynı sağlayıcıya birden fazla hesap eklenebilir. Azure seçeneği, yönetici `AZURE_OPENAI_ENDPOINT` ve `AZURE_OPENAI_DEPLOYMENT` değerlerini önceden tanımladıysa görünür. Anahtar doğrulanmadan kaydedilmez; işletim sisteminin güvenli kasasında tutulur. Model sohbet çubuğundan seçilir; erişilebiliyorsa önerilen Luna varsayılandır.
 
 Sohbet ve ses hesapları ayrıdır. ChatGPT girişi ses transkripsiyonunu kapsamaz; ses hesabı kullanıcı tarafından ayrıca seçilir. Limit dolduğunda farklı ücretli hesaba otomatik geçilmez. Araştırma kaynakları, güvenlik kararları ve kalan kurumsal parçalar: [AI hesapları](ai-accounts.md).
 

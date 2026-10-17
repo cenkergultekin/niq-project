@@ -182,7 +182,7 @@ class AIService:
             raise AIUnavailableError("AI için API anahtarı ayarlanmamış. Ayarlar sayfasından ekleyin.")
         limit = max_tokens or self.config["max_output_tokens"]
         # Yerel sunucular eski max_tokens adını bekler; OpenAI/OpenRouter için doğru alan max_completion_tokens
-        limit_key = "max_tokens" if self.config["provider"] in ("local", "gemini") else "max_completion_tokens"
+        limit_key = "max_tokens" if self.config["provider"] in ("local", "gemini", "mistral", "deepseek") else "max_completion_tokens"
         params: Dict[str, Any] = {"model": self.config["model"], "messages": messages, limit_key: limit}
         if not _NO_TEMPERATURE.search(self.config["model"]):
             params["temperature"] = temperature

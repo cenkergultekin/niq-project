@@ -23,12 +23,13 @@
         context.clearRect(0, 0, 480, 160);
         for (const pixel of pixels) {
             context.fillStyle = '#b6d8ff';
-            context.fillRect(pixel.x + pixel.dx, pixel.y + pixel.dy, 12, 12);
+            context.fillRect(Math.round(pixel.x + pixel.dx), Math.round(pixel.y + pixel.dy), 12, 12);
         }
     }
     function animate(now) {
         frame = 0;
-        const dt = Math.min((now - (previous || now)) / 1000, .032);
+        if (previous && now - previous < 32) { frame = requestAnimationFrame(animate); return; }
+        const dt = Math.min((now - (previous || now)) / 1000, .05);
         previous = now;
         elapsed += dt;
         const targetX = (pointer.x - .5) * 28, targetY = (pointer.y - .5) * 20;
@@ -37,8 +38,6 @@
         spring.x += spring.vx * dt; spring.y += spring.vy * dt;
         atmosphere?.style.setProperty('--ambient-x', spring.x + 'px');
         atmosphere?.style.setProperty('--ambient-y', spring.y + 'px');
-        atmosphere?.style.setProperty('--pointer-x', (50 + spring.x) + '%');
-        atmosphere?.style.setProperty('--pointer-y', (50 + spring.y) + '%');
         layers.forEach((layer, i) => {
             const phase = elapsed * .055 + i * 2.1;
             layer.style.transform = `translate3d(${Math.sin(phase) * 9}%, ${Math.cos(phase * .73) * 7}%, 0) rotate(${Math.sin(phase * .6) * 12}deg) scale(${1 + Math.sin(phase * .8) * .08})`;
@@ -67,7 +66,7 @@
     function resume() {
         cancelAnimationFrame(frame); previous = 0;
         if (!document.hidden && !motion.matches) frame = requestAnimationFrame(animate);
-        else {
+        else if (motion.matches) {
             pixels.forEach((p) => { p.dx = p.dy = p.vx = p.vy = 0; });
             layers.forEach((layer) => layer.removeAttribute('style'));
             atmosphere?.removeAttribute('style'); draw();

@@ -143,6 +143,7 @@ class NIQDesktopApp(QMainWindow):
 
         self.web_view = QWebEngineView()
         self.web_view.setPage(LocalOnlyPage(self.web_view, self.origin))
+        self.web_view.page().setBackgroundColor(QColor("#081324"))
         self.web_channel = QWebChannel(self.web_view.page())
         self.desktop_bridge = DesktopBridge(self)
         self.web_channel.registerObject("desktop", self.desktop_bridge)
@@ -192,7 +193,6 @@ class NIQDesktopApp(QMainWindow):
             controls.addWidget(result)
             return result
 
-        self.reload_button = button("reload", "Yenile (F5)", self.web_view.reload)
         button("minimize", "Simge durumuna küçült", self.showMinimized)
         self.maximize_button = button("maximize", "Büyüt", self.toggle_maximized)
         button("close", "Kapat (Ctrl+Q)", self.close)
@@ -214,21 +214,12 @@ class NIQDesktopApp(QMainWindow):
         self.menuBar().hide()
         self.statusBar().setSizeGripEnabled(False)
         self.statusBar().addPermanentWidget(QSizeGrip(self))
-        self.web_view.loadStarted.connect(lambda: self._loading(True))
-        self.web_view.loadFinished.connect(lambda ok: self._loading(False))
         self.statusBar().showMessage("NIQ başlatılıyor...")
 
         self._attempts = 0
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._load_when_ready)
         self.timer.start(300)
-
-    def _loading(self, loading):
-        self.reload_button.setIcon(control_icon("stop" if loading else "reload"))
-        self.reload_button.setToolTip("Yüklemeyi durdur" if loading else "Yenile (F5)")
-        self.reload_button.setAccessibleName(self.reload_button.toolTip())
-        self.reload_button.clicked.disconnect()
-        self.reload_button.clicked.connect(self.web_view.stop if loading else self.web_view.reload)
 
     def toggle_maximized(self):
         self.showNormal() if self.isMaximized() else self.showMaximized()
@@ -271,8 +262,6 @@ class NIQDesktopApp(QMainWindow):
             return act
 
         file_menu = self.menuBar().addMenu("Dosya")
-        file_menu.addAction(action("Yenile", "F5", self.web_view.reload))
-        file_menu.addSeparator()
         file_menu.addAction(action("Çıkış", "Ctrl+Q", self.close))
         view_menu = self.menuBar().addMenu("Görünüm")
         view_menu.addAction(action("Tam Ekran", "F11", self._toggle_fullscreen))

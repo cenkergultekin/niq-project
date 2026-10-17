@@ -291,6 +291,7 @@ button.chatgpt-signin:hover { background: #171717; }
 .chatgpt-signin img { flex: none; }
 #view-onboarding { max-width: 860px; padding-top: clamp(24px, 6vh, 72px); padding-bottom: 48px; text-align: center; }
 body.onboarding main { padding-bottom: 0; }
+body.booting .top, body.booting main, body.booting .dock { visibility: hidden; }
 #onboarding-account { width: 100%; max-width: 680px; margin: 0 auto; }
 #onboarding-wordmark { display: block; width: min(360px, 90%); height: auto; margin: 0 auto 18px; }
 #view-onboarding h1 { font-size: clamp(28px, 4vw, 38px); letter-spacing: -1.2px; margin: 0 0 30px; }
@@ -304,7 +305,14 @@ body.onboarding main { padding-bottom: 0; }
 #view-onboarding .status { text-align: center; }
 #view-onboarding #onboarding-status { font-size: 17px; }
 .ambient { transition: none; }
+.ambient::before { background: radial-gradient(ellipse 35vw 45vh at 50% 50%, #3265a52e, transparent 75%); }
 .ambient i { animation: none; will-change: transform; }
+#onboarding-wordmark { image-rendering: pixelated; }
+.plan-choice { color: #c4dcff; background: #28467480; }
+#niq-plan { width: min(480px, calc(100% - 32px)); text-align: center; padding: 40px 32px; }
+#niq-plan h3 { font-family: var(--font-head); font-size: 30px; letter-spacing: -1px; margin: 0 0 20px; }
+#niq-plan > img { display: block; margin: 0 auto 20px; }
+#niq-plan .btn { margin-top: 16px; width: 100%; padding: 12px; }
 @media (max-width: 540px) {
   #onboarding-ai #ai-accounts > .row:first-child > .btn { width: 100%; }
   #onboarding-ai .provider-choice { flex: 1 1 42%; justify-content: center; padding: 12px 8px; }

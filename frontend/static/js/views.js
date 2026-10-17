@@ -314,5 +314,9 @@
         $('q').focus();
     }
 
-    document.addEventListener('DOMContentLoaded', boot);
+    document.addEventListener('DOMContentLoaded', async () => {
+        try { await boot(); }
+        catch (error) { NIQ.toast(error.message, 'error'); }
+        finally { document.body.classList.remove('booting'); }
+    });
 })();

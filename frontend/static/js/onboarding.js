@@ -22,7 +22,6 @@
             const advance = async () => {
                 if (advancing || !NIQ.state.onboarding || $('onboarding-account').hidden) return;
                 advancing = true;
-                $('onboarding-retry').hidden = true;
                 say('Hesap doğrulanıyor…');
                 try {
                     welcomeRequired = !!(await NIQ.accounts.activate())?.welcome_required;
@@ -33,11 +32,9 @@
                     $('onboarding-databases').hidden = false;
                     say('');
                 } catch (error) {
-                    $('onboarding-retry').hidden = !NIQ.accounts.isConnected();
                     if (!error.cancelled) say(error.message);
                 } finally { advancing = false; }
             };
-            $('onboarding-retry').onclick = advance;
             window.addEventListener('niq-account-connected', advance);
             if (NIQ.accounts.isConnected()) advance();
             $('onboarding-discover').onclick = async () => {

@@ -119,6 +119,8 @@
             return selected.data;
         },
         bind() {
+            $('ai-upgrade').onclick = () => $('niq-plan').showModal();
+            $('niq-plan-close').onclick = () => $('niq-plan').close();
             $('ai-chatgpt').onclick = guarded(() => login('chatgpt'));
             $('ai-api-toggle').onclick = () => {
                 $('ai-key-form').hidden = !$('ai-key-form').hidden;

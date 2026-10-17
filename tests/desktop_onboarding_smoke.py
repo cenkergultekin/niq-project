@@ -60,6 +60,7 @@ def main():
     window.show()
     started, stage, pending = time.monotonic(), 0, False
     checks = []
+    plan_checked = False
 
     def finish(error=None):
         timer.stop()
@@ -68,7 +69,7 @@ def main():
         qt.exit(1 if error else 0)
 
     def result(raw):
-        nonlocal stage, pending
+        nonlocal stage, pending, plan_checked
         pending = False
         try:
             data = json.loads(raw or "{}")
@@ -80,6 +81,14 @@ def main():
                     return
                 assert calls == [] and state.connector is None
                 assert data["noContinue"]
+                assert data["noRetry"] and data["turkish"] and data["noProviderHeading"]
+                if not plan_checked:
+                    plan_checked = True
+                    window.web_view.page().runJavaScript("NIQ.$('ai-upgrade').click()")
+                    return
+                assert data["plan"]
+                checks.append("turkish-options-no-retry-plan-without-login")
+                window.web_view.page().runJavaScript("NIQ.$('niq-plan-close').click()")
                 window.grab().save(str(home / "login.png"))
                 checks.append("login-options-no-browser-no-discovery")
                 js = "NIQ.$('ai-api-toggle').click()"
@@ -133,8 +142,10 @@ def main():
         elif not pending:
             pending = True
             window.web_view.page().runJavaScript("""JSON.stringify({ready:!!window.NIQ?.onboarding,
-                onboarding:!!window.NIQ?.state.onboarding, account:document.querySelectorAll('.provider-choice').length===4,
+                onboarding:!!window.NIQ?.state.onboarding, account:document.querySelectorAll('.provider-choice').length===7,
                 noContinue:!document.getElementById('onboarding-next'),keyForm:!document.getElementById('ai-key-form')?.hidden,
+                noRetry:!document.getElementById('onboarding-retry'),turkish:document.getElementById('ai-chatgpt')?.textContent.includes('ChatGPT ile devam et'),
+                noProviderHeading:!document.getElementById('ai-provider-label'),plan:!!document.getElementById('niq-plan')?.open,
                 centered:(()=>{const r=document.getElementById('onboarding-account').getBoundingClientRect();return Math.abs(r.x+r.width/2-document.documentElement.clientWidth/2)<3;})(),
                 wideButton:(()=>{const b=document.getElementById('ai-add').getBoundingClientRect(),f=document.getElementById('ai-key-form').getBoundingClientRect();return Math.abs(b.width-f.width)<3;})(),
                 approval:!!document.getElementById('confirm')?.open,models:document.querySelectorAll('.model-option').length,

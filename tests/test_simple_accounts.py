@@ -8,7 +8,7 @@ from backend.services.ai_accounts import ACCOUNT_PROVIDERS
 from backend.services.ai_service import AIService, AIServiceError
 
 
-@pytest.mark.parametrize("provider", ["openai", "openrouter", "anthropic", "gemini"])
+@pytest.mark.parametrize("provider", ["openai", "openrouter", "anthropic", "gemini", "groq", "mistral", "deepseek"])
 def test_simple_setup_derives_endpoint_and_recommended_model(monkeypatch, provider):
     model = ACCOUNT_PROVIDERS[provider]["default_model"]
     monkeypatch.setattr(ai_accounts, "provider_models", lambda config: [{"id": model, "name": model}])
@@ -33,6 +33,16 @@ def test_gemini_uses_supported_token_parameter():
                                 "base_url": ACCOUNT_PROVIDERS["gemini"]["url"], "max_output_tokens": 2048})
     params = service._build_params([{"role": "user", "content": "ok"}], None, None, 0.0)
     assert params["max_tokens"] == 2048 and "max_completion_tokens" not in params
+
+
+@pytest.mark.parametrize("provider, parameter", [("groq", "max_completion_tokens"), ("mistral", "max_tokens"), ("deepseek", "max_tokens")])
+def test_additional_providers_use_their_supported_token_parameter(provider, parameter):
+    info = ACCOUNT_PROVIDERS[provider]
+    service = AIService(config={"provider": provider, "api_key": "synthetic", "model": info["default_model"],
+                                "base_url": info["url"], "max_output_tokens": 512})
+    params = service._build_params([{"role": "user", "content": "ok"}], None, None, 0.0)
+    assert params[parameter] == 512
+    assert ("max_tokens" in params) != ("max_completion_tokens" in params)
 
 
 def test_callback_redirect_removes_provider_credentials_and_renders_success(client, monkeypatch):
