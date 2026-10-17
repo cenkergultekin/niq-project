@@ -289,3 +289,7 @@ button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); 
 button.chatgpt-signin { display: inline-flex; align-items: center; gap: 10px; background: #000; color: #fff; }
 button.chatgpt-signin:hover { background: #171717; }
 .chatgpt-signin img { flex: none; }
+#view-onboarding { max-width: 760px; padding-top: 8vh; }
+#onboarding-ai > #ai-accounts > .grid2,
+#onboarding-ai > #ai-accounts > .row:not(:first-child) { display: none; }
+#view-onboarding #ai-account-status:empty { display: none; }

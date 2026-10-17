@@ -27,11 +27,12 @@ def main():
                 "backend.services.ai_service", "backend.core.utils", "backend.config.config",
                 "backend.services.agent_api", "sqlglot.dialects.sqlite", "anthropic", "jwt", "filelock"]
     if desktop:
-        required += ["backend.routes.ai_accounts", "backend.routes.routes", "backend.services.analyst"]
+        required += ["backend.routes.ai_accounts", "backend.routes.routes", "backend.routes.onboarding", "backend.services.analyst", "app"]
     for name in required:
         if name not in pyz.toc:
             missing.append(name)
-    for path in (ROOT / "backend").rglob("*.py"):
+    sources = [*(ROOT / "backend").rglob("*.py"), *([ROOT / "app.py"] if desktop else [])]
+    for path in sources:
         name = ".".join(path.relative_to(ROOT).with_suffix("").parts)
         if name.endswith(".__init__"):
             name = name.removesuffix(".__init__")

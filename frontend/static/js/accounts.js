@@ -110,6 +110,14 @@
 
     NIQ.accounts = {
         load,
+        async activate() {
+            const account = current();
+            if (!account?.connected) return;
+            if (!$('ai-model').value.trim()) await loadModels();
+            const selected = await api('/ai/select', { body: { account_id: account.id, model: $('ai-model').value.trim() } });
+            await NIQ.refreshHealth();
+            return selected.data;
+        },
         bind() {
             $('ai-chatgpt').onclick = guarded(() => login('chatgpt'));
             $('ai-openrouter').onclick = guarded(() => login('openrouter'));

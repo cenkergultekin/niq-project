@@ -138,7 +138,7 @@
 
     // ---- yönlendirme ----
     NIQ.go = function (name) {
-        const view = name || 'chat';
+        const view = NIQ.state.onboarding ? 'onboarding' : name || 'chat';
         if (view !== 'chat' && NIQ.chat) NIQ.chat.cancelRecording();
         document.querySelectorAll('.view').forEach((el) => el.classList.toggle('active', el.id === 'view-' + view));
         document.querySelectorAll('#links button').forEach((b) => b.classList.toggle('active', b.dataset.view === view));

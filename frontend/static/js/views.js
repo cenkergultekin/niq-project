@@ -303,6 +303,7 @@
             NIQ.chat.plan(text);
         });
         await NIQ.connect.init();
+        if (await NIQ.onboarding.start()) return;
         const health = await NIQ.refreshHealth();
         if (health && health.database_connected && health.profile) NIQ.setConnection(health.profile);
         else if (!(await NIQ.connect.autoConnect())) NIQ.connect.show();

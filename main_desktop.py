@@ -337,7 +337,9 @@ class NIQDesktopApp(QMainWindow):
 
 
 def main() -> None:
-    qt_app = QApplication([arg for arg in sys.argv if arg != "--demo"])
+    from backend.config.config import Settings
+    flask_app.config["ONBOARDING_REQUIRED"] = "--onboarding" in sys.argv or not Settings.load()["onboarding_complete"]
+    qt_app = QApplication([arg for arg in sys.argv if arg not in ("--demo", "--onboarding")])
     if "--demo" in sys.argv:
         from backend.db.demo import demo_database
         from backend.db.profiles import Profile
@@ -351,7 +353,8 @@ def main() -> None:
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("NIQ.Desktop.3")
     qt_app.setApplicationVersion(APP_VERSION)
     qt_app.setStyle("Fusion")
-    start_background_services()
+    if not flask_app.config["ONBOARDING_REQUIRED"]:
+        start_background_services()
     window = NIQDesktopApp()
     window.show()
     sys.exit(qt_app.exec())

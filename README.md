@@ -36,7 +36,9 @@ Mikrofon düğmesine basıp konuş: sözlerin soru çubuğunda silik taslak olar
 
 Desteklenenler: **SQL Server, PostgreSQL, MySQL / MariaDB, SQLite**. Yeni tür, `backend/db/dialects.py` içine bir kayıt eklenerek gelir.
 
-Arayüzde bağlantı dört adımdır: **Tür** (yerelde bulunan sunucular ayrıca önerilir), **Bilgiler**, **Test**, **Bağlan**.
+İlk açılışta giriş seçenekleri gösterilir; login kendiliğinden başlamaz ve giriş yapmadan test edilebilir. Sonra **İzin ver ve bul**, bu bilgisayardaki yalnızca DB adlarını listeler. Tablo/kolon/içerik okunmaz ve izin verilmeden ilerlenmez. Kullanıcı DB'leri seçip **Seçilenlere erişim ver** dediğinde mevcut bilgiler otomatik doldurulur ve sohbet ekranına geçilir. İçerik yalnızca soru gönderildiğinde sorgulanır; otomatik veri profillemesi yapılmaz. Mevcut erişim bilgisi bulunmayan kaynaklar otomatik bağlanmış gibi gösterilmez.
+
+Sonraki kullanımlarda kaynak paneli veya isteğe bağlı gelişmiş bağlantı alanları kullanılabilir.
 - Bir bağlantı URL'si, ODBC/ADO/JDBC dizesi ya da dosya yolu yapıştırırsanız tür, sunucu, port, veritabanı ve kullanıcı otomatik dolar. Port, sunucu ve sürücü varsayılanları türe göre tahmin edilir.
 - "Veritabanlarını getir" adı henüz bilinmeyen veya yanlış yazılmış veritabanından bağımsız olarak sunucudaki adları listeler.
 - **Test** adım adım ilerler (sürücü, ağ, giriş, tablo erişimi, yetki); başarısız adım ne yapılacağını söyler.

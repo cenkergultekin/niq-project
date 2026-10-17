@@ -387,7 +387,7 @@
                 });
                 group.appendChild(el('label', { class: 'check db-catalog-item', 'data-search': `${item.source} ${item.name}`.toLocaleLowerCase('tr') },
                     check, el('span', {}, el('span', { text: item.name }),
-                        el('span', { class: 'item-meta', text: `${item.source} · ${item.table_count} tablo` }))));
+                        el('span', { class: 'item-meta', text: item.source }))));
             });
             box.appendChild(group);
         });
@@ -399,12 +399,7 @@
         status('Veritabanları ve erişimler kontrol ediliyor...');
         try {
             const found = (await api('/db/catalog', { body: {} })).data;
-            state.catalog = found.databases;
-            state.scopeMode = 'recommended';
-            state.selected = new Set(state.catalog.filter((item) => item.recommended).map((item) => item.id));
-            $('db-catalog-panel').hidden = !state.catalog.length;
-            $('db-catalog-count').textContent = `${found.platform_count} platformda ${found.database_count} veritabanına erişilebiliyor.`;
-            renderCatalog();
+            useCatalog(found);
             const missing = NIQ.clear($('db-unavailable-list'));
             found.unavailable.forEach((item) => missing.appendChild(el('li', { text: `${item.name}: ${item.reason}` })));
             $('db-unavailable').hidden = !found.unavailable.length;
@@ -422,7 +417,6 @@
         if (NIQ.state.profile) fill(NIQ.state.profile);
         goStep('source');
         loadProfiles();
-        loadDiscovery();
     }
 
     function hide() {
@@ -445,7 +439,16 @@
         }
     }
 
-    NIQ.connect = { show, hide, autoConnect, loadProfiles, saveProfile };
+    function useCatalog(found) {
+        state.catalog = found.databases;
+        state.scopeMode = 'recommended';
+        state.selected = new Set(state.catalog.filter((item) => item.recommended).map((item) => item.id));
+        $('db-catalog-panel').hidden = !state.catalog.length;
+        $('db-catalog-count').textContent = `${found.platform_count} platformda ${found.database_count} veritabanı bulundu.`;
+        renderCatalog();
+    }
+
+    NIQ.connect = { show, hide, autoConnect, loadProfiles, saveProfile, useCatalog };
 
     NIQ.connect.init = async function () {
         if (window.qt?.webChannelTransport && window.QWebChannel) {
@@ -489,6 +492,10 @@
         $('db-scope-connect-btn').addEventListener('click', async () => {
             $('db-scope-connect-btn').disabled = true;
             try {
+                if (NIQ.state.onboarding) {
+                    await NIQ.onboarding.connect([...state.selected]);
+                    return;
+                }
                 const profile = (await api('/db/scope', { body: { databases: [...state.selected] } })).data;
                 clearForm(); await afterConnect(profile);
             } catch (error) { status(error.message, 'error'); }

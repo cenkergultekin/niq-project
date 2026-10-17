@@ -23,6 +23,23 @@
     </header>
 
     <main>
+        <section class="view" id="view-onboarding">
+            <div id="onboarding-account">
+                <h1>Hesabını bağla</h1>
+                <div id="onboarding-ai"></div>
+                <div class="row"><button class="btn primary" id="onboarding-next">Devam</button><span class="note">Giriş yapmadan da deneyebilirsin.</span></div>
+            </div>
+            <div id="onboarding-databases" hidden>
+                <h1>Veritabanı erişimi</h1>
+                <div id="onboarding-permission">
+                    <p>Bu bilgisayardaki veritabanlarının yalnızca adlarını bulmamıza izin ver.</p>
+                    <p class="note">Tablo, kolon ve içerik okunmaz. Mevcut bağlantı bilgileri otomatik kullanılır; hiçbir bilgi kopyalaman gerekmez.</p>
+                    <button class="btn primary" id="onboarding-discover">İzin ver ve bul</button>
+                </div>
+                <div id="onboarding-results"></div>
+            </div>
+            <p class="status" id="onboarding-status" role="status"></p>
+        </section>
         <!-- Sohbet -->
         <section class="view active" id="view-chat">
             <div id="connect" hidden>
@@ -49,7 +66,7 @@
                     <div class="field"><input id="db-catalog-search" type="search" aria-label="Veritabanı ara" placeholder="Veritabanı ara"></div>
                     <div id="db-catalog-list"></div>
                     <div class="row"><button class="btn primary" id="db-scope-connect-btn">Seçilenlere bağlan</button><span class="note" id="db-scope-count"></span></div>
-                    <p class="note">Sohbet ilgili veritabanlarını ve tabloları kendisi seçer. Sorgular salt-okunur çalışır.</p>
+                    <p class="note">İçerik yalnızca soru gönderdiğinde sorgulanır. Erişim verdiğin veritabanları kullanılır.</p>
                     <details id="db-unavailable" hidden><summary>Erişilemeyen kaynaklar</summary><ul id="db-unavailable-list"></ul></details>
                 </div>
                 <p class="note" id="db-discovery-status" role="status"></p>
@@ -326,6 +343,7 @@
     <script src="/static/js/connect.js"></script>
     <script src="/static/js/chat.js"></script>
     <script src="/static/js/accounts.js"></script>
+    <script src="/static/js/onboarding.js"></script>
     <script src="/static/js/views.js"></script>
 </body>
 </html>

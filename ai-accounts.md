@@ -38,6 +38,8 @@ Anthropic, başkaları için geliştirilen ürünlerde Console anahtarı veya de
 
 ## MCP
 
+İlk masaüstü açılışında önce giriş seçenekleri gösterilir; tarayıcı ancak kullanıcı giriş düğmesine basınca başlar. Giriş yapmadan test edilebilir. Sonraki ekran yerel veritabanlarının yalnızca adlarını bulmak için açık izin ister; öncesinde keşif, otomatik bağlantı, tablo/kolon veya içerik okuması yapılmaz. Sonra kullanıcı istediği DB'leri seçip erişim verir; mevcut bilgilerle otomatik bağlanılır ve sohbet ekranına geçilir. Şema ancak seçili erişim onayından sonra tanınır, içerik yalnızca soru gönderildiğinde sorgulanır. Otomatik arka plan veri profillemesi kaldırıldı; profiling ayrı kullanıcı eylemidir.
+
 Ayarlar'dan yapılandırma kopyalanır. Kaynak kurulum Python + `niq_mcp.py`, paketli dağıtım aynı dizindeki `NIQ-MCP.exe` kullanır. GUI exe'sinin stdout'u olmadığından ayrı console executable kullanılır; installer ikisini taşır.
 
 İstemci kendi modeliyle şema okuyup `run_sql` çağırabilir; NIQ AI anahtarı gerekmez. `ask`, NIQ'de seçilmiş hesabı kullanır. MCP'ye token/anahtar/parola, giriş başlatma veya hesap değiştirme aracı verilmez. Veritabanı yazmaları mevcut SQL güvenlik katmanında reddedilir.
