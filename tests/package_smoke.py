@@ -45,7 +45,7 @@ def main():
             host, port, database, user, password = raw.split(":", 4)
             assert host == "127.0.0.1" and database == "niq_it", "Yalnızca yerel test DB'si kullanılabilir"
             dialect = "postgresql" if "POSTGRES" in key else "mssql" if "MSSQL" in key else "mysql"
-            request("/connect", {"type": dialect, "host": host, "port": int(port), "database": database,
+            request("/set_db", {"type": dialect, "host": host, "port": int(port), "database": database,
                                  "user": user, "password": password, "name": "Paket kontrolü"})
             ask("How many rows are in smoke_orders?", 3)
             passed.append(key.removeprefix("NIQ_IT_") + "_REAL_AI")
