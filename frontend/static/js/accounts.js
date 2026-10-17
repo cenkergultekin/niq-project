@@ -41,6 +41,7 @@
 
     function renderNewProvider() {
         const provider = $('ai-new-provider').value;
+        $('ai-new-key').placeholder = provider === 'groq' ? 'Groq API anahtarını gir' : 'API anahtarını gir';
         document.querySelectorAll('.provider-choice').forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.provider === provider)));
     }
 
@@ -58,8 +59,12 @@
             voice.appendChild(el('option', { value: a.id, text: a.label + ' · API bakiyesi' })));
         voice.value = data.voice;
         const providers = NIQ.clear($('ai-providers'));
-        Object.entries(data.providers).filter(([, p]) => p.simple).forEach(([id, p]) => {
+        const order = ['anthropic', 'openai', 'gemini', 'deepseek', 'openrouter', 'mistral', 'groq'];
+        Object.entries(data.providers).filter(([, p]) => p.simple)
+            .sort(([a], [b]) => (order.indexOf(a) < 0 ? order.length : order.indexOf(a)) - (order.indexOf(b) < 0 ? order.length : order.indexOf(b)))
+            .forEach(([id, p]) => {
             providers.appendChild(el('button', { type: 'button', class: 'provider-choice', 'data-provider': id,
+                title: id === 'groq' ? 'Groq üzerinden Llama' : p.label,
                 'aria-pressed': 'false', onclick: () => { $('ai-new-provider').value = id; renderNewProvider(); } },
                 el('img', { src: '/static/images/' + p.icon, alt: '', width: '22', height: '22' }), p.label));
         });

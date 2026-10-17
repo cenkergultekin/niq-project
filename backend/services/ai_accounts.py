@@ -22,7 +22,7 @@ ACCOUNT_PROVIDERS = {
     "anthropic": {"label": "Anthropic", "url": "https://api.anthropic.com", "voice": False, "simple": True, "default_model": "claude-haiku-5.5", "icon": "anthropic.ico"},
     "openrouter": {"label": "OpenRouter", "url": "https://openrouter.ai/api/v1", "voice": True, "simple": True, "default_model": "openai/gpt-6-luna", "icon": "openrouter.png"},
     "gemini": {"label": "Gemini", "url": "https://generativelanguage.googleapis.com/v1beta/openai", "voice": False, "simple": True, "default_model": "gemini-3.8-flash", "icon": "gemini.svg"},
-    "groq": {"label": "Groq · Llama", "url": "https://api.groq.com/openai/v1", "voice": False, "simple": True, "default_model": "llama-3.3-70b-versatile", "icon": "groq.ico"},
+    "groq": {"label": "Llama", "url": "https://api.groq.com/openai/v1", "voice": False, "simple": True, "default_model": "llama-3.3-70b-versatile", "icon": "groq.ico"},
     "mistral": {"label": "Mistral", "url": "https://api.mistral.ai/v1", "voice": False, "simple": True, "default_model": "mistral-small-latest", "icon": "mistral.png"},
     "deepseek": {"label": "DeepSeek", "url": "https://api.deepseek.com", "voice": False, "simple": True, "default_model": "deepseek-flash", "icon": "deepseek.svg"},
     "azure": {"label": "Azure OpenAI", "voice": False},

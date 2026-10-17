@@ -318,9 +318,9 @@
             <div class="cmd-list" id="cmd-list" hidden></div>
             <div id="ai-plan" class="note" hidden>ChatGPT planı kullanılıyor · <a href="https://chatgpt.com/settings/usage" rel="noreferrer">Kullanımı yönet</a></div>
             <div class="bar">
-                <button class="composer-model" id="chat-model-button" aria-haspopup="true" aria-expanded="false" title="Model seç"><span id="chat-model-label">Luna</span></button>
                 <textarea id="q" rows="1" placeholder="Verilerine sor…" aria-label="Sorun" autocomplete="off"></textarea>
                 <div class="composer-tools">
+                <button class="composer-model" id="chat-model-button" aria-haspopup="listbox" aria-expanded="false" title="Model seç"><span id="chat-model-label">GPT-6 Luna</span></button>
                 <button class="icon-btn" id="mic" title="Konuşarak sor" aria-label="Konuşarak sor">
                     <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
                 </button>
@@ -329,7 +329,7 @@
                 </button>
                 </div>
             </div>
-            <div id="chat-model-menu" class="model-menu" hidden><input type="search" id="chat-model-search" placeholder="Model ara" aria-label="Model ara"><div id="chat-model-options"></div></div>
+            <div id="chat-model-menu" class="model-menu" hidden><input type="search" id="chat-model-search" placeholder="Model ara" aria-label="Model ara"><div id="chat-model-options" role="listbox" aria-label="Modeller"></div></div>
         </div>
     </footer>
 

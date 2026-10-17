@@ -2,7 +2,14 @@
 (function () {
     const { $, el, api } = NIQ;
     let models = [], active = '', account = '', recommended = '';
-    const shortName = (id) => /(^|\/)gpt-6-luna$/.test(id) ? 'Luna' : id.split('/').pop();
+    const shortName = (id, name = '') => {
+        const slug = id.split('/').pop();
+        const match = slug.match(/^gpt-(\d+(?:\.\d+)?)-(sol|astra|luna|terra)(?:-(.*))?$/i);
+        if (!match) return name || slug;
+        const family = match[2][0].toUpperCase() + match[2].slice(1).toLowerCase();
+        const suffix = match[3] ? ' ' + match[3].split('-').map((word) => word[0].toUpperCase() + word.slice(1)).join(' ') : '';
+        return 'GPT-' + match[1] + ' ' + family + suffix;
+    };
     function close() {
         $('chat-model-menu').hidden = true;
         $('chat-model-button').setAttribute('aria-expanded', 'false');
@@ -11,7 +18,7 @@
         const query = $('chat-model-search').value.toLocaleLowerCase('tr');
         const list = NIQ.clear($('chat-model-options'));
         [...models].sort((a, b) => Number(b.id === recommended) - Number(a.id === recommended)).filter((m) =>
-            (m.id + ' ' + m.name).toLocaleLowerCase('tr').includes(query)).forEach((m) => {
+            (m.id + ' ' + m.name + ' ' + shortName(m.id)).toLocaleLowerCase('tr').includes(query)).forEach((m) => {
             const button = el('button', { class: 'model-option', role: 'option', 'aria-selected': String(m.id === active),
                 onclick: async () => {
                     button.disabled = true;
@@ -20,7 +27,9 @@
                         active = m.id; NIQ.models.label(active); close(); await NIQ.refreshHealth();
                     } catch (error) { NIQ.toast(error.message, 'error'); }
                     finally { button.disabled = false; }
-                } }, el('span', { text: shortName(m.id) }), m.id === recommended ? el('small', { text: 'Önerilen' }) : null);
+                } }, el('span', { text: shortName(m.id, m.name) }),
+                el('span', { class: 'model-option-state' }, m.id === recommended ? el('small', { text: 'Önerilen' }) : null,
+                    m.id === active ? el('span', { class: 'model-check', 'aria-hidden': 'true', text: '✓' }) : null));
             list.appendChild(button);
         });
     }

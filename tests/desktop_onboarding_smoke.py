@@ -130,6 +130,8 @@ def main():
                     design_stage = 1
                     return
                 if design_stage == 1:
+                    assert data['providerOrder'] == ['Anthropic', 'OpenAI', 'Gemini', 'DeepSeek', 'OpenRouter', 'Mistral', 'Llama']
+                    assert data['providersOneLine'] and data['providersFit']
                     window.grab().save(str(home / "access-desktop.png"))
                     window.setMinimumSize(320, 400)
                     window.resize(390, 844)
@@ -141,14 +143,17 @@ def main():
                     def capture_mobile():
                         nonlocal design_stage
                         window.grab().save(str(home / 'access-mobile.png'))
-                        window.resize(1400, 900)
+                        window.resize(1100, 700)
                         design_stage = 3
                     QTimer.singleShot(400, capture_mobile)
                     checks.append("access-options-plan-and-mobile-layout")
                     return
                 if design_stage == 21:
                     return
-                assert data["centered"] and data["wideButton"] and data["noContinue"], str(data)
+                if data["viewportWidth"] < 1000:
+                    return
+                assert data["centered"] and data["wideButton"] and data["noContinue"] and data["fitsPage"], str(data)
+                checks.append("api-setup-fits-1100x700-without-vertical-scroll")
                 window.grab().save(str(home / "api-form.png"))
                 checks.append("centered-wide-single-connect-action")
                 js = "NIQ.$('ai-new-label').value='Synthetic'; NIQ.$('ai-new-key').value='synthetic-key'; NIQ.$('ai-add').click()"
@@ -178,7 +183,7 @@ def main():
             elif stage == 6:
                 if data["models"] != 2:
                     return
-                assert data["modelLabel"] == "Luna" and data["recommended"]
+                assert data["modelLabel"] == "GPT-6 Luna" and data["recommended"] and data["modelBesideMic"] and data["barHeight"] == 48
                 checks.append("composer-model-picker-luna-recommended")
                 window.grab().save(str(home / "chat.png"))
                 finish()
@@ -197,6 +202,11 @@ def main():
             window.web_view.page().runJavaScript("""JSON.stringify({ready:!!window.NIQ?.onboarding,
                 onboarding:!!window.NIQ?.state.onboarding, account:document.querySelectorAll('.provider-choice').length===7,
                 noContinue:!document.getElementById('onboarding-next'),keyForm:!document.getElementById('ai-key-form')?.hidden,
+                providerOrder:[...document.querySelectorAll('.provider-choice')].map(b=>b.textContent.trim()),
+                providersOneLine:(()=>{const xs=[...document.querySelectorAll('.provider-choice')];return xs.every(b=>Math.abs(b.getBoundingClientRect().top-xs[0].getBoundingClientRect().top)<2);})(),
+                providersFit:(()=>{const p=document.getElementById('ai-providers');return p.scrollWidth<=p.clientWidth+1;})(),
+                viewportWidth:document.documentElement.clientWidth,
+                fitsPage:document.documentElement.scrollHeight<=document.documentElement.clientHeight+1,
                 overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+1,
                 onboardingStatus:document.getElementById('onboarding-status')?.textContent,
                 accountStatus:document.getElementById('ai-account-status')?.textContent,
@@ -206,6 +216,8 @@ def main():
                 wideButton:(()=>{const b=document.getElementById('ai-add').getBoundingClientRect(),f=document.getElementById('ai-key-form').getBoundingClientRect();return Math.abs(b.width-f.width)<3;})(),
                 approval:!!document.getElementById('confirm')?.open,models:document.querySelectorAll('.model-option').length,
                 modelLabel:document.getElementById('chat-model-label')?.textContent,recommended:document.getElementById('chat-model-options')?.textContent.includes('Önerilen'),
+                barHeight:document.querySelector('.bar')?.getBoundingClientRect().height,
+                modelBesideMic:(()=>{const b=document.getElementById('chat-model-button'),m=document.getElementById('mic');return b.nextElementSibling===m&&Math.abs(m.getBoundingClientRect().left-b.getBoundingClientRect().right-6)<2;})(),
                 permission:!document.getElementById('onboarding-databases')?.hidden,
                 dock:!document.getElementById('dock')?.hidden,databases:document.querySelectorAll('.db-catalog-item input').length})""", result)
     timer = QTimer()
