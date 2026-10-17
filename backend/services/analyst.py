@@ -135,6 +135,7 @@ def run_analysis(connector: Connector, ai: AIService, history: HistoryStore, kno
             assistant["_anthropic_blocks"] = message.anthropic_blocks
         if calls:
             assistant["tool_calls"] = [
+                c.model_dump(exclude_none=True) if hasattr(c, "model_dump") else
                 {"id": c.id, "type": "function", "function": {"name": c.function.name, "arguments": c.function.arguments}}
                 for c in calls]
         messages.append(assistant)

@@ -1,10 +1,13 @@
 """User-initiated account setup. MCP never receives credentials or login tools."""
 import json
+import secrets
 import sys
+import threading
+import time
 from pathlib import Path
 
 import requests
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, redirect, render_template, request, session, url_for
 
 from backend.config.config import Settings
 from backend.core.approval import ApprovalRequired, require_approval
@@ -14,6 +17,8 @@ from backend.services.ai_auth import browser_auth
 
 accounts_bp = Blueprint("ai_accounts", __name__)
 ok = ResponseFormatter.format_success_response
+_results = {}
+_result_lock = threading.Lock()
 
 
 @accounts_bp.errorhandler(ValidationError)
@@ -33,6 +38,10 @@ def public_account(item):
 def account_models(account_id):
     store = AccountStore()
     config = store.configure(account_id)
+    return provider_models(config)
+
+
+def provider_models(config):
     provider = config["provider"]
     if provider in ("azure", "compatible", "local"):
         return [{"id": config["model"], "name": config["model"]}] if config["model"] else []
@@ -47,9 +56,41 @@ def account_models(account_id):
         data = response.json()
         if provider == "chatgpt":
             return [{"id": m["slug"], "name": m["display_name"]} for m in data["models"] if m.get("visibility") == "list"]
-        return [{"id": m["id"], "name": m.get("display_name") or m.get("name") or m["id"]} for m in data["data"]]
+        excluded = ("embedding", "transcribe", "audio", "tts", "image", "live", "realtime", "whisper", "dall-e", "sora")
+        return [{"id": m["id"], "name": m.get("display_name") or m.get("name") or m["id"]} for m in data["data"]
+                if not any(word in m["id"].lower() for word in excluded)
+                and "text" in m.get("architecture", {}).get("output_modalities", ["text"])]
     except (requests.RequestException, ValueError, KeyError):
         raise ValidationError("Hesabın modelleri alınamadı. Girişini kontrol ederek yeniden dene.") from None
+
+
+def validate_key_account(data):
+    """Simple setup derives endpoint/model and verifies inference BEFORE saving a key."""
+    from backend.services.ai_accounts import endpoint
+    from backend.services.ai_service import AIService, AIServiceError, AIUnavailableError
+    provider = data.get("provider")
+    info = ACCOUNT_PROVIDERS.get(provider, {})
+    if not info.get("simple"):
+        raise ValidationError("OpenAI, Anthropic, OpenRouter veya Gemini seç.")
+    key = str(data.get("api_key") or "").strip()
+    if not key:
+        raise ValidationError("API anahtarını gir.")
+    config = {"provider": provider, "api_key": key, "base_url": endpoint(provider),
+              "model": info["default_model"], "max_output_tokens": 2048}
+    models = provider_models(config)
+    eligible = [m for m in models if not any(word in m["id"].lower() for word in
+                ("embedding", "transcribe", "audio", "tts", "image", "vision-preview", "live", "whisper", "dall-e"))]
+    if not eligible:
+        raise ValidationError("Bu hesapta kullanılabilir sohbet modeli bulunamadı.")
+    if config["model"] not in {m["id"] for m in eligible}:
+        config["model"] = eligible[0]["id"]
+    try:
+        answer = AIService(config=config)._complete([{"role": "user", "content": "Reply with exactly: ok"}], None, max_tokens=512)
+        if not answer.strip():
+            raise AIServiceError("No completed text")
+    except (AIServiceError, AIUnavailableError):
+        raise ValidationError("Anahtar doğrulanamadı. Anahtarı, kullanım iznini ve bakiyeyi kontrol et.") from None
+    return {**data, "api_key": key, "model": config["model"], "base_url": config["base_url"]}
 
 
 def reconfigure():
@@ -71,8 +112,9 @@ def list_accounts():
 def add_account():
     data = request.get_json(silent=True) or {}
     require_approval(data, "save_ai_account")
-    item = AccountStore().add_key(data)
+    item = AccountStore().add_key(validate_key_account(data))
     Settings.save({"ai_account_id": item["id"]})
+    session["AI_VERIFIED"] = item["id"]
     reconfigure()
     return jsonify(ok(public_account(item)))
 
@@ -162,17 +204,40 @@ def cancel_login():
 
 @accounts_bp.get("/auth/callback")
 def login_callback():
+    provider = browser_auth.provider(request.args.get("state", ""))
     try:
         browser_auth.finish(request.args)
-        message = "Giriş tamamlandı. NIQ'ye dönebilirsin."
-        code = 200
-    except ValidationError:
-        message, code = "Giriş tamamlanamadı. NIQ'ye dönerek yeniden dene.", 400
-    # No provider descriptions, query parameters, identities, or tokens in HTML.
-    return ("<!doctype html><html lang=tr><meta charset=utf-8><title>NIQ</title>"
-            "<body style='background:#091222;color:#dce7f7;font:18px system-ui;padding:48px'>" + message + "</body></html>",
-            code, {"Cache-Control": "no-store", "Referrer-Policy": "no-referrer",
-                   "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'"})
+        outcome = {"success": True, "message": "Hesabın NIQ'ye bağlandı. Veritabanı izinlerinle devam edebilirsin."}
+    except ValidationError as exc:
+        outcome = {"success": False, "message": str(exc)}
+    result_id = secrets.token_urlsafe(24)
+    with _result_lock:
+        for key in list(_results):
+            if _results[key]["expires"] < time.time():
+                _results.pop(key)
+        _results[result_id] = {**outcome, "provider": provider, "expires": time.time() + 600}
+    response = redirect(url_for("ai_accounts.login_result", result_id=result_id), code=303)
+    response.headers.update({"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"})
+    return response
+
+
+@accounts_bp.get("/auth/result/<result_id>")
+def login_result(result_id):
+    with _result_lock:
+        result = _results.get(result_id)
+    if not result or result["expires"] < time.time():
+        result = {"success": False, "provider": "chatgpt", "message": "Bu girişin süresi doldu. NIQ'den yeni giriş başlat."}
+    return render_template("auth-result.html", **result), 200 if result["success"] else 400, {
+        "Cache-Control": "no-store", "Referrer-Policy": "no-referrer",
+        "Content-Security-Policy": "default-src 'none'; img-src 'self'; font-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'"}
+
+
+@accounts_bp.post("/api/desktop/focus")
+def focus_desktop():
+    from backend.services import desktop_actions
+    if desktop_actions.available:
+        desktop_actions.focus_requested.set()
+    return jsonify(ok({"available": desktop_actions.available}))
 
 
 @accounts_bp.get("/api/mcp/config")

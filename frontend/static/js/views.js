@@ -295,6 +295,7 @@
         bindGlossary();
         bindSettings();
         NIQ.accounts.bind();
+        NIQ.models.bind();
         document.querySelectorAll('#links button').forEach((b) => b.addEventListener('click', () => NIQ.go(b.dataset.view)));
         $('job-plan-btn').addEventListener('click', () => {
             const text = $('job-text').value.trim();

@@ -82,6 +82,10 @@ def test_first_run_gates_content_and_requires_separate_user_access(scope_api, mo
     assert client.post("/api/query", json={"question": "SELECT"}).status_code == 423
     assert client.get("/api/db/discover").status_code == 423
     assert client.get("/api/connections").status_code == 423
+    assert client.post("/api/onboarding/discover", json={"approved": True}).status_code == 400
+    Settings.save({"ai_account_id": "synthetic-account"})
+    with client.session_transaction() as setup_session:
+        setup_session["AI_VERIFIED"] = "synthetic-account"
     assert client.post("/api/onboarding/connect", json={"databases": [], "approved": True}).status_code == 400
     assert client.post("/api/onboarding/discover", json={}).status_code == 409
     result = client.post("/api/onboarding/discover", json={"approved": True}).json["data"]

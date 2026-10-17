@@ -25,9 +25,10 @@
     <main>
         <section class="view" id="view-onboarding">
             <div id="onboarding-account">
+                <canvas id="onboarding-wordmark" width="480" height="160" role="img" aria-label="NIQ"></canvas>
                 <h1>Hesabını bağla</h1>
                 <div id="onboarding-ai"></div>
-                <div class="row"><button class="btn primary" id="onboarding-next">Devam</button><span class="note">Giriş yapmadan da deneyebilirsin.</span></div>
+                <button class="btn primary" id="onboarding-retry" hidden>Yeniden bağlan</button>
             </div>
             <div id="onboarding-databases" hidden>
                 <h1>Veritabanı erişimi</h1>
@@ -233,14 +234,14 @@
             <div id="ai-accounts">
                 <div class="row">
                     <button class="btn chatgpt-signin" id="ai-chatgpt"><img src="/static/images/chatgpt-logo-white.svg" alt="" width="20" height="20">Continue with ChatGPT</button>
-                    <button class="btn" id="ai-openrouter">OpenRouter ile bağlan</button>
+                    <button class="btn api-choice" id="ai-api-toggle"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="4"/><path d="m11 11 9 9m-3-3 3-3m-6 0 3-3"/></svg>API anahtarı ekle</button>
                     <button class="link-btn" id="ai-cancel" hidden>Vazgeç</button>
                 </div>
                 <p class="note" id="ai-login-status" role="status"></p>
                 <div class="grid2">
                     <div class="field"><label for="ai-account">Sohbet hesabı</label><select id="ai-account"></select></div>
-                    <div class="field"><label for="ai-model">Model / deployment</label><input id="ai-model" list="ai-models" autocomplete="off"><datalist id="ai-models"></datalist></div>
-                    <div class="field"><label for="ai-label">Hesap adı</label><input id="ai-label" autocomplete="off"></div>
+                    <div class="field" hidden><label for="ai-model">Model</label><input id="ai-model" list="ai-models" autocomplete="off"><datalist id="ai-models"></datalist></div>
+                    <div class="field"><label for="ai-label">İsim</label><input id="ai-label" autocomplete="off"></div>
                     <div class="field"><label for="ai-voice">Ses hesabı</label><select id="ai-voice"></select></div>
                 </div>
                 <div class="row">
@@ -249,17 +250,12 @@
                     <button class="link-btn" id="ai-reauth">Yeniden giriş</button>
                     <button class="link-btn" id="ai-disconnect">Çıkış yap</button>
                 </div>
-                <details><summary>API anahtarı ekle</summary>
-                    <div class="grid2" style="margin-top:12px">
-                        <div class="field"><label for="ai-new-provider">Sağlayıcı</label><select id="ai-new-provider"></select></div>
-                        <div class="field"><label for="ai-new-label">Hesap adı</label><input id="ai-new-label" placeholder="Örn. Finans ekibi" autocomplete="off"></div>
-                        <div class="field" id="ai-new-key-field"><label for="ai-new-key">API anahtarı</label><input type="password" id="ai-new-key" autocomplete="off"></div>
-                        <div class="field" id="ai-new-url-field" hidden><label for="ai-new-url">Kaynak adresi</label><input type="url" id="ai-new-url" autocomplete="off"></div>
-                        <div class="field"><label for="ai-new-model">Model / deployment</label><input id="ai-new-model" autocomplete="off"></div>
-                    </div>
-                    <p class="note" id="ai-billing">API kullanımı sağlayıcının bakiyesinden düşer. Anahtar yalnızca işletim sisteminin güvenli kasasında saklanır.</p>
-                    <button class="btn primary" id="ai-add">Bağla</button>
-                </details>
+                <div id="ai-key-form" class="api-key-form" hidden>
+                    <div class="field"><label id="ai-provider-label">Sağlayıcı</label><div id="ai-providers" class="provider-choices" role="group" aria-labelledby="ai-provider-label"></div><input type="hidden" id="ai-new-provider"></div>
+                    <div class="field"><label for="ai-new-label">İsim</label><input id="ai-new-label" placeholder="İş hesabım" autocomplete="off"></div>
+                    <div class="field"><label for="ai-new-key">API anahtarı</label><input type="password" id="ai-new-key" autocomplete="off" placeholder="API anahtarını gir"></div>
+                    <button class="btn primary" id="ai-add">Bağlan</button>
+                </div>
                 <p class="status" id="ai-account-status" role="status"></p>
             </div>
             <details><summary>Mevcut sağlayıcı ayarı</summary>
@@ -313,6 +309,7 @@
             <div class="cmd-list" id="cmd-list" hidden></div>
             <div id="ai-plan" class="note" hidden>ChatGPT planı kullanılıyor · <a href="https://chatgpt.com/settings/usage" rel="noreferrer">Kullanımı yönet</a></div>
             <div class="bar">
+                <button class="composer-model" id="chat-model-button" aria-haspopup="true" aria-expanded="false" title="Model seç"><span id="chat-model-label">Luna</span></button>
                 <textarea id="q" rows="1" placeholder="Verilerine sor…" aria-label="Sorun" autocomplete="off"></textarea>
                 <div class="composer-tools">
                 <button class="icon-btn" id="mic" title="Konuşarak sor" aria-label="Konuşarak sor">
@@ -323,6 +320,7 @@
                 </button>
                 </div>
             </div>
+            <div id="chat-model-menu" class="model-menu" hidden><input type="search" id="chat-model-search" placeholder="Model ara" aria-label="Model ara"><div id="chat-model-options"></div></div>
         </div>
     </footer>
 
@@ -339,11 +337,13 @@
     <div id="toast" hidden></div>
 
     <script src="/static/js/core.js"></script>
+    <script src="/static/js/atmosphere.js"></script>
     <script src="/static/js/voice.js"></script>
     <script src="/static/js/connect.js"></script>
     <script src="/static/js/chat.js"></script>
     <script src="/static/js/accounts.js"></script>
     <script src="/static/js/onboarding.js"></script>
+    <script src="/static/js/models.js"></script>
     <script src="/static/js/views.js"></script>
 </body>
 </html>

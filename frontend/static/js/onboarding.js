@@ -3,6 +3,7 @@
     const { $, api } = NIQ;
     let accountsParent, catalogParent;
     let welcomeRequired = false;
+    let advancing = false;
     const say = (message) => { $('onboarding-status').textContent = message || ''; };
 
     NIQ.onboarding = {
@@ -10,6 +11,7 @@
             const info = (await api('/onboarding')).data;
             if (!info.required) return false;
             NIQ.state.onboarding = true;
+            document.body.classList.add('onboarding');
             accountsParent = $('ai-accounts').parentNode;
             catalogParent = $('db-catalog-panel').parentNode;
             $('onboarding-ai').appendChild($('ai-accounts'));
@@ -17,14 +19,27 @@
             document.querySelector('.top').hidden = true;
             NIQ.go('onboarding');
             await NIQ.accounts.load();
-            $('onboarding-next').onclick = async () => {
+            const advance = async () => {
+                if (advancing || !NIQ.state.onboarding || $('onboarding-account').hidden) return;
+                advancing = true;
+                $('onboarding-retry').hidden = true;
+                say('Hesap doğrulanıyor…');
                 try {
                     welcomeRequired = !!(await NIQ.accounts.activate())?.welcome_required;
+                    await api('/onboarding/account', { body: {} });
+                    say('Bağlantı başarılı');
+                    await new Promise((resolve) => setTimeout(resolve, 1000));
                     $('onboarding-account').hidden = true;
                     $('onboarding-databases').hidden = false;
                     say('');
-                } catch (error) { if (!error.cancelled) say(error.message); }
+                } catch (error) {
+                    $('onboarding-retry').hidden = !NIQ.accounts.isConnected();
+                    if (!error.cancelled) say(error.message);
+                } finally { advancing = false; }
             };
+            $('onboarding-retry').onclick = advance;
+            window.addEventListener('niq-account-connected', advance);
+            if (NIQ.accounts.isConnected()) advance();
             $('onboarding-discover').onclick = async () => {
                 $('onboarding-discover').disabled = true;
                 say('Veritabanı adları bulunuyor…');
@@ -48,6 +63,7 @@
                 accountsParent.insertBefore($('ai-accounts'), accountsParent.querySelector('details'));
                 catalogParent.appendChild($('db-catalog-panel'));
                 NIQ.state.onboarding = false;
+                document.body.classList.remove('onboarding');
                 document.querySelector('.top').hidden = false;
                 $('db-scope-connect-btn').textContent = 'Seçilenlere bağlan';
                 NIQ.go('chat');

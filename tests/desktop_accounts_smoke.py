@@ -139,7 +139,7 @@ def main():
         elif not pending:
             pending = True
             window.web_view.page().runJavaScript("""JSON.stringify({
-                ready:!!window.NIQ?.accounts,loaded:!!document.getElementById('ai-new-provider')?.options.length,
+                ready:!!window.NIQ?.accounts,loaded:document.querySelectorAll('.provider-choice').length === 4,
                 approval:!!document.getElementById('confirm')?.open,welcome:!!document.getElementById('ai-welcome')?.open,
                 model:document.getElementById('ai-model')?.value,mcp:document.getElementById('ai-mcp-config')?.textContent,
                 plan:!document.getElementById('ai-plan')?.hidden,barHeight:document.querySelector('.bar')?.getBoundingClientRect().height

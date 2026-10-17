@@ -5,7 +5,6 @@
     let attempt = null;
     let pollTimer = null;
     let modelRequest = 0;
-    const defaults = { openai: 'gpt-4o-mini', anthropic: 'claude-haiku-5.5', openrouter: 'openai/gpt-6-luna', local: 'llama3.1' };
     const current = () => data?.accounts.find((a) => a.id === $('ai-account').value);
     const say = (message) => { $('ai-account-status').textContent = message; };
     const guarded = (fn) => async () => {
@@ -36,18 +35,13 @@
         if (version !== modelRequest || current()?.id !== account.id) return;
         NIQ.clear($('ai-models'));
         models.forEach((m) => $('ai-models').appendChild(el('option', { value: m.id, label: m.name })));
-        if (!$('ai-model').value && models.length) $('ai-model').value = models[0].id;
+        if (!$('ai-model').value && models.length) $('ai-model').value = (models.find((m) => /(^|\/)gpt-6-luna$/.test(m.id)) || models[0]).id;
         say(models.length ? '' : 'Bu hesap için kullanılabilir model bulunamadı.');
     }
 
     function renderNewProvider() {
         const provider = $('ai-new-provider').value;
-        $('ai-new-url-field').hidden = !['azure', 'compatible', 'local'].includes(provider);
-        $('ai-new-key-field').hidden = provider === 'local';
-        $('ai-new-model').value = defaults[provider] || '';
-        $('ai-new-model').placeholder = provider === 'azure' ? 'Azure deployment adı' : 'Model adı';
-        $('ai-new-url').value = provider === 'local' ? 'http://127.0.0.1:11434/v1' : '';
-        $('ai-new-url').placeholder = provider === 'azure' ? 'https://kaynak.openai.azure.com' : 'https://sunucu/v1';
+        document.querySelectorAll('.provider-choice').forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.provider === provider)));
     }
 
     async function load(preferred) {
@@ -57,18 +51,22 @@
         data.accounts.forEach((a) => select.appendChild(el('option', {
             value: a.id, text: a.label + (a.label === data.providers[a.provider].label ? '' : ' · ' + data.providers[a.provider].label) + (a.connected ? '' : ' · yeniden giriş gerekli'),
         })));
-        select.value = preferred || data.active;
+        select.value = preferred || data.active || (NIQ.state.onboarding ? data.accounts.filter((a) => a.connected).at(-1)?.id : '') || '';
         const voice = NIQ.clear($('ai-voice'));
         voice.appendChild(el('option', { value: '', text: data.active ? 'Ses kapalı' : 'Mevcut sağlayıcı' }));
         data.accounts.filter((a) => a.connected && data.providers[a.provider].voice).forEach((a) =>
             voice.appendChild(el('option', { value: a.id, text: a.label + ' · API bakiyesi' })));
         voice.value = data.voice;
-        const providers = NIQ.clear($('ai-new-provider'));
-        Object.entries(data.providers).filter(([id]) => id !== 'chatgpt').forEach(([id, p]) =>
-            providers.appendChild(el('option', { value: id, text: p.label })));
-        providers.value = 'openai';
+        const providers = NIQ.clear($('ai-providers'));
+        Object.entries(data.providers).filter(([, p]) => p.simple).forEach(([id, p]) => {
+            providers.appendChild(el('button', { type: 'button', class: 'provider-choice', 'data-provider': id,
+                'aria-pressed': 'false', onclick: () => { $('ai-new-provider').value = id; renderNewProvider(); } },
+                el('img', { src: '/static/images/' + p.icon, alt: '', width: '22', height: '22' }), p.label));
+        });
+        $('ai-new-provider').value = 'openai';
         renderNewProvider();
         await showAccount();
+        window.dispatchEvent(new CustomEvent('niq-accounts-loaded'));
     }
 
     async function poll() {
@@ -88,12 +86,13 @@
                 await load(result.account_id);
                 await loadModels();
                 // Sign-in doesn't change billing until the user selects this account.
-                say('Modelini seçip Hesabı kullan ile devam et.');
+                say('Hesap bağlandı.');
+                window.dispatchEvent(new CustomEvent('niq-account-connected'));
             }
         } catch (error) {
-            if (attempt !== id) return;
+            if (attempt && attempt !== id) return;
             $('ai-login-status').textContent = error.message;
-            pollTimer = setTimeout(poll, 4000);
+            if (attempt) pollTimer = setTimeout(poll, 4000);
         }
     }
 
@@ -110,9 +109,10 @@
 
     NIQ.accounts = {
         load,
+        isConnected: () => !!current()?.connected,
         async activate() {
             const account = current();
-            if (!account?.connected) return;
+            if (!account?.connected) throw new Error('Devam etmek için bir hesap bağla.');
             if (!$('ai-model').value.trim()) await loadModels();
             const selected = await api('/ai/select', { body: { account_id: account.id, model: $('ai-model').value.trim() } });
             await NIQ.refreshHealth();
@@ -120,7 +120,10 @@
         },
         bind() {
             $('ai-chatgpt').onclick = guarded(() => login('chatgpt'));
-            $('ai-openrouter').onclick = guarded(() => login('openrouter'));
+            $('ai-api-toggle').onclick = () => {
+                $('ai-key-form').hidden = !$('ai-key-form').hidden;
+                $('ai-api-toggle').setAttribute('aria-expanded', String(!$('ai-key-form').hidden));
+            };
             $('ai-reauth').onclick = guarded(() => login('chatgpt', current().id));
             $('ai-cancel').onclick = guarded(async () => {
                 if (attempt) await api('/ai/auth/cancel', { body: { attempt } });
@@ -129,7 +132,6 @@
                 $('ai-login-status').textContent = 'Giriş iptal edildi.';
             });
             $('ai-account').onchange = guarded(() => showAccount(true));
-            $('ai-new-provider').onchange = renderNewProvider;
             $('ai-model-refresh').onclick = guarded(loadModels);
             $('ai-welcome-dismiss').onclick = guarded(async () => {
                 await api('/ai/welcome/dismiss', { body: {} }); $('ai-welcome').close();
@@ -147,14 +149,17 @@
             $('ai-add').onclick = guarded(async () => {
                 const button = $('ai-add');
                 button.disabled = true;
+                button.textContent = 'Bağlanıyor…';
                 try {
                     await api('/ai/accounts', { body: {
                         provider: $('ai-new-provider').value, label: $('ai-new-label').value.trim(),
-                        api_key: $('ai-new-key').value.trim(), base_url: $('ai-new-url').value.trim(), model: $('ai-new-model').value.trim(),
+                        api_key: $('ai-new-key').value.trim(),
                     } });
                     $('ai-new-key').value = '';
                     await load(); await NIQ.refreshHealth(); say('Hesap bağlandı.');
-                } finally { button.disabled = false; }
+                    $('ai-key-form').hidden = true;
+                    window.dispatchEvent(new CustomEvent('niq-account-connected'));
+                } finally { button.disabled = false; button.textContent = 'Bağlan'; }
             });
             $('ai-disconnect').onclick = guarded(async () => {
                 const result = await api('/ai/accounts/' + current().id + '/disconnect', { body: {} });

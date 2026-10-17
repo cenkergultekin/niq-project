@@ -18,9 +18,10 @@ from backend.core.utils import ValidationError
 
 ACCOUNT_PROVIDERS = {
     "chatgpt": {"label": "ChatGPT", "auth": "oauth", "billing": "ChatGPT planı", "voice": False},
-    "openai": {"label": "OpenAI API", "url": "https://api.openai.com/v1", "voice": True},
-    "anthropic": {"label": "Anthropic API", "url": "https://api.anthropic.com", "voice": False},
-    "openrouter": {"label": "OpenRouter", "url": "https://openrouter.ai/api/v1", "voice": True},
+    "openai": {"label": "OpenAI", "url": "https://api.openai.com/v1", "voice": True, "simple": True, "default_model": "gpt-6-luna", "icon": "chatgpt-logo-white.svg"},
+    "anthropic": {"label": "Anthropic", "url": "https://api.anthropic.com", "voice": False, "simple": True, "default_model": "claude-haiku-5.5", "icon": "anthropic.ico"},
+    "openrouter": {"label": "OpenRouter", "url": "https://openrouter.ai/api/v1", "voice": True, "simple": True, "default_model": "openai/gpt-6-luna", "icon": "openrouter.png"},
+    "gemini": {"label": "Gemini", "url": "https://generativelanguage.googleapis.com/v1beta/openai", "voice": False, "simple": True, "default_model": "gemini-3.8-flash", "icon": "gemini.svg"},
     "azure": {"label": "Azure OpenAI", "voice": False},
     "compatible": {"label": "OpenAI uyumlu", "voice": False},
     "local": {"label": "Yerel model", "url": "http://127.0.0.1:11434/v1", "voice": False},
@@ -45,6 +46,17 @@ def endpoint(provider, value=""):
             raise ValidationError("Azure kaynak adresi veya /openai/v1 adresi gerekli.")
         parsed = parsed._replace(path="/openai/v1")
     return urlunsplit(parsed).rstrip("/")
+
+
+# Corporate administrators provision the Azure resource once; end users only
+# choose a provider, name and key. An API key cannot reveal its Azure resource.
+if os.getenv("AZURE_OPENAI_ENDPOINT") and os.getenv("AZURE_OPENAI_DEPLOYMENT"):
+    try:
+        azure_url = endpoint("azure", os.environ["AZURE_OPENAI_ENDPOINT"])
+        ACCOUNT_PROVIDERS["azure"].update(simple=True, url=azure_url,
+                                        default_model=os.environ["AZURE_OPENAI_DEPLOYMENT"], icon="microsoft.svg")
+    except ValidationError:
+        pass
 
 
 class AccountStore:

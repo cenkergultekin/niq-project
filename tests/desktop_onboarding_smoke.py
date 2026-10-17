@@ -21,11 +21,23 @@ def main():
     from backend.db import catalog
     from backend.db.connector import Connector
     from backend.db.profiles import Profile
-    from backend.routes import onboarding
+    from backend.routes import ai_accounts, onboarding
     from backend.routes.routes import state
     from backend.services import ai_auth
+    from backend.services.ai_service import AIService
 
     calls = []
+    AIService.suggest_questions = lambda *args, **kwargs: ["Kaç sipariş var?"]
+    import keyring
+    vault = {}
+    keyring.get_password = lambda service, name: vault.get(name)
+    keyring.set_password = lambda service, name, value: vault.__setitem__(name, value)
+    keyring.delete_password = lambda service, name: vault.pop(name, None)
+    def valid_key(data):
+        calls.append("account-verified")
+        return {**data, "model": "gpt-6-luna"}
+    ai_accounts.validate_key_account = valid_key
+    ai_accounts.provider_models = lambda config: [{"id": "gpt-6-luna", "name": "Luna"}, {"id": "gpt-4o-mini", "name": "Mini"}]
     original = onboarding.collect_catalog
     def collect(*args):
         calls.append("names")
@@ -67,26 +79,45 @@ def main():
                 if not data["onboarding"] or not data["account"]:
                     return
                 assert calls == [] and state.connector is None
+                assert data["noContinue"]
                 window.grab().save(str(home / "login.png"))
                 checks.append("login-options-no-browser-no-discovery")
-                js = "NIQ.$('onboarding-next').click()"
+                js = "NIQ.$('ai-api-toggle').click()"
             elif stage == 1:
+                if not data["keyForm"]:
+                    return
+                assert data["centered"] and data["wideButton"] and data["noContinue"], str(data)
+                window.grab().save(str(home / "api-form.png"))
+                checks.append("centered-wide-single-connect-action")
+                js = "NIQ.$('ai-new-label').value='Synthetic'; NIQ.$('ai-new-key').value='synthetic-key'; NIQ.$('ai-add').click()"
+            elif stage == 2:
+                if not data["approval"]:
+                    return
+                js = "NIQ.$('confirm-yes').click()"
+            elif stage == 3:
                 if not data["permission"]:
                     return
-                assert calls == [] and not data["dock"]
+                assert calls == ["account-verified"] and not data["dock"]
+                checks.append("three-field-key-verified-auto-advances")
                 checks.append("names-consent-required")
                 js = "NIQ.$('onboarding-discover').click()"
-            elif stage == 2:
+            elif stage == 4:
                 if data["databases"] != 2:
                     return
-                assert calls == ["names"] and state.connector is None
+                assert calls == ["account-verified", "names"] and state.connector is None
                 checks.append("names-only-no-connection")
                 js = "const xs=[...document.querySelectorAll('.db-catalog-item input')]; xs[1].click(); NIQ.$('db-scope-connect-btn').click()"
-            elif stage == 3:
+            elif stage == 5:
                 if data["onboarding"]:
                     return
-                assert state.connector is not None and len(state.workspace) == 1 and calls == ["names"]
+                assert state.connector is not None and len(state.workspace) == 1 and calls == ["account-verified", "names"]
                 checks.append("selected-access-enters-chat-no-content")
+                js = "NIQ.$('chat-model-button').click()"
+            elif stage == 6:
+                if data["models"] != 2:
+                    return
+                assert data["modelLabel"] == "Luna" and data["recommended"]
+                checks.append("composer-model-picker-luna-recommended")
                 window.grab().save(str(home / "chat.png"))
                 finish()
                 return
@@ -102,7 +133,12 @@ def main():
         elif not pending:
             pending = True
             window.web_view.page().runJavaScript("""JSON.stringify({ready:!!window.NIQ?.onboarding,
-                onboarding:!!window.NIQ?.state.onboarding, account:!!document.getElementById('ai-new-provider')?.options.length,
+                onboarding:!!window.NIQ?.state.onboarding, account:document.querySelectorAll('.provider-choice').length===4,
+                noContinue:!document.getElementById('onboarding-next'),keyForm:!document.getElementById('ai-key-form')?.hidden,
+                centered:(()=>{const r=document.getElementById('onboarding-account').getBoundingClientRect();return Math.abs(r.x+r.width/2-document.documentElement.clientWidth/2)<3;})(),
+                wideButton:(()=>{const b=document.getElementById('ai-add').getBoundingClientRect(),f=document.getElementById('ai-key-form').getBoundingClientRect();return Math.abs(b.width-f.width)<3;})(),
+                approval:!!document.getElementById('confirm')?.open,models:document.querySelectorAll('.model-option').length,
+                modelLabel:document.getElementById('chat-model-label')?.textContent,recommended:document.getElementById('chat-model-options')?.textContent.includes('Önerilen'),
                 permission:!document.getElementById('onboarding-databases')?.hidden,
                 dock:!document.getElementById('dock')?.hidden,databases:document.querySelectorAll('.db-catalog-item input').length})""", result)
     timer = QTimer()

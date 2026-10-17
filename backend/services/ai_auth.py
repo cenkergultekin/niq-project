@@ -1,6 +1,7 @@
 """Official browser sign-in, PKCE + OIDC; never another application's client ID."""
 import base64
 import hashlib
+import logging
 import secrets
 import threading
 import time
@@ -19,12 +20,26 @@ RESOURCE = "https://api.openai.com/v1"
 TOKEN_URL = ISSUER + "/api/accounts/oauth/token"
 SCOPES = "openid profile email offline_access resource.invoke chatgpt.tokens.use.direct"
 JWKS = jwt.PyJWKClient(ISSUER + "/.well-known/jwks.json", timeout=15)
+logger = logging.getLogger(__name__)
 
 
 def _post(url, **kwargs):
     try:
         response = requests.post(url, timeout=25, allow_redirects=False, **kwargs)
         if not 200 <= response.status_code < 300:
+            try:
+                code = response.json().get("error")
+                if isinstance(code, dict):
+                    code = code.get("code")
+            except ValueError:
+                code = None
+            recovery = {"invalid_grant": "Giriş kodunun süresi doldu veya kod kullanıldı. Yeni giriş başlat.",
+                        "invalid_client": "ChatGPT uygulama kaydı doğrulanamadı. Yeni giriş başlat.",
+                        "access_denied": "Giriş izni verilmedi. Yeniden giriş yap.",
+                        "invalid_scope": "İstenen plan izni sağlayıcı tarafından kabul edilmedi."}
+            if isinstance(code, str) and code in recovery:
+                logger.info("OAuth endpoint rejected request: %s", code)
+                raise ValidationError(recovery[code])
             raise ValidationError("Sağlayıcı girişi tamamlamadı. Yeniden giriş yap.")
         return response.json()
     except (requests.RequestException, ValueError):
@@ -128,12 +143,21 @@ class BrowserAuth:
         except ValidationError as exc:
             p.update(status="failed", message=str(exc))
             raise
-        except Exception:
+        except jwt.InvalidTokenError as exc:
+            logger.info("OAuth identity validation failed: %s", type(exc).__name__)
+            p.update(status="failed", message="ChatGPT girişinin kimliği doğrulanamadı. Yeni giriş başlat.")
+            raise ValidationError(p["message"]) from None
+        except Exception as exc:
+            logger.info("OAuth completion failed: %s", type(exc).__name__)
             p.update(status="failed", message="Giriş doğrulanamadı. NIQ'ye dönerek yeniden dene.")
             raise ValidationError(p["message"]) from None
         finally:
             p.pop("verifier", None)
             p.pop("nonce", None)
+
+    def provider(self, state):
+        with self._lock:
+            return self._pending.get(state, {}).get("provider", "chatgpt")
 
     def _exchange(self, p, params):
         store = AccountStore()
@@ -163,7 +187,7 @@ class BrowserAuth:
             raise ValidationError("ChatGPT plan kullanımına izin verilmedi.")
         item = {"id": old["id"] if old else str(uuid.uuid4()), "provider": "chatgpt", "auth": "oauth",
                 "client_id": client_id, "subject": identity["sub"], "label": old["label"] if old else "ChatGPT",
-                "base_url": RESOURCE, "model": "", "connected": True}
+                "base_url": RESOURCE, "model": old.get("model", "") if old else "", "connected": True}
         result["expires_at"] = time.time() + int(result.get("expires_in", 3600))
         store.put(item, result)
         return item

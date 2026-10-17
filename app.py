@@ -49,7 +49,7 @@ def create_app() -> Flask:
         if request.method not in ("GET", "HEAD", "OPTIONS") and request.headers.get("Sec-Fetch-Site") == "cross-site":
             abort(403)
         if app.config["ONBOARDING_REQUIRED"] and not session.get("ONBOARDING_DONE"):
-            allowed = ("/api/onboarding", "/api/ai/", "/api/settings", "/api/health", "/api/db/types", "/api/mcp/config")
+            allowed = ("/api/onboarding", "/api/ai/", "/api/settings", "/api/health", "/api/db/types", "/api/mcp/config", "/api/desktop/focus")
             if request.path.startswith("/api/") and not request.path.startswith(allowed):
                 return {"success": False, "error": "Devam etmek için veritabanı erişim izinlerini tamamla.",
                         "error_code": "ONBOARDING_REQUIRED"}, 423

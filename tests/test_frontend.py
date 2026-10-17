@@ -31,7 +31,7 @@ def test_no_external_resources_so_it_works_offline():
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node yok")
-@pytest.mark.parametrize("name", ["core", "voice", "connect", "chat", "accounts", "onboarding", "views"])
+@pytest.mark.parametrize("name", ["core", "atmosphere", "voice", "connect", "chat", "accounts", "onboarding", "models", "views"])
 def test_javascript_is_syntactically_valid(name):
     result = subprocess.run(["node", "--check", str(STATIC / "js" / f"{name}.js")], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr

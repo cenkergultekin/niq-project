@@ -24,7 +24,8 @@ ChatGPT girişi ses transkripsiyonunu kapsamaz. Ses için ayrıca OpenAI API/Ope
 | OpenRouter | Resmî OAuth / PKCE veya API anahtarı | OpenRouter bakiyesi |
 | OpenAI | API anahtarı | OpenAI API projesi |
 | Anthropic | API anahtarı, native Messages SDK | Claude Console API bakiyesi |
-| Azure OpenAI | Anahtar, kaynak adresi ve deployment | Azure kaynağı |
+| Gemini | API anahtarı | Google AI API hesabı |
+| Azure OpenAI | Yönetici tarafından önceden yapılandırılmış kaynak + API anahtarı | Azure kaynağı |
 | OpenAI uyumlu | HTTPS adresi, anahtar ve model | Seçilen sunucunun hesabı |
 | Yerel | Loopback adresi ve model | Yerel model |
 
@@ -38,7 +39,7 @@ Anthropic, başkaları için geliştirilen ürünlerde Console anahtarı veya de
 
 ## MCP
 
-İlk masaüstü açılışında önce giriş seçenekleri gösterilir; tarayıcı ancak kullanıcı giriş düğmesine basınca başlar. Giriş yapmadan test edilebilir. Sonraki ekran yerel veritabanlarının yalnızca adlarını bulmak için açık izin ister; öncesinde keşif, otomatik bağlantı, tablo/kolon veya içerik okuması yapılmaz. Sonra kullanıcı istediği DB'leri seçip erişim verir; mevcut bilgilerle otomatik bağlanılır ve sohbet ekranına geçilir. Şema ancak seçili erişim onayından sonra tanınır, içerik yalnızca soru gönderildiğinde sorgulanır. Otomatik arka plan veri profillemesi kaldırıldı; profiling ayrı kullanıcı eylemidir.
+İlk masaüstü açılışında önce giriş seçenekleri gösterilir; tarayıcı ancak kullanıcı giriş düğmesine basınca başlar. Giriş zorunludur; doğrulanan hesap başarı mesajından sonra otomatik olarak DB izin ekranına ilerler. Model seçimi sohbet çubuğundadır; erişilebiliyorsa Luna önerilir. API formunda yalnızca sağlayıcı, isim ve anahtar bulunur. Sonraki ekran yerel veritabanlarının yalnızca adlarını bulmak için açık izin ister; öncesinde keşif, otomatik bağlantı, tablo/kolon veya içerik okuması yapılmaz. Sonra kullanıcı istediği DB'leri seçip erişim verir; mevcut bilgilerle otomatik bağlanılır ve sohbet ekranına geçilir. Şema ancak seçili erişim onayından sonra tanınır, içerik yalnızca soru gönderildiğinde sorgulanır. Otomatik arka plan veri profillemesi kaldırıldı; profiling ayrı kullanıcı eylemidir.
 
 Ayarlar'dan yapılandırma kopyalanır. Kaynak kurulum Python + `niq_mcp.py`, paketli dağıtım aynı dizindeki `NIQ-MCP.exe` kullanır. GUI exe'sinin stdout'u olmadığından ayrı console executable kullanılır; installer ikisini taşır.
 
@@ -53,3 +54,5 @@ Otomatik kota rotasyonu, sessiz ücretli fallback veya anahtar paylaşımı yokt
 Sentetik imzalı OIDC, PKCE, replay/expiry/denial, eksik plan izni, yanlış subject/client/audience/issuer/nonce, token rotasyonu, büyük kasa kaydı ve yarım stream testleri var. Gerçek Qt'de giriş onayı, model seçimi, ilk plan bildirimi, ayrı ses hesabı ve MCP kopyalama sınandı. Subprocess MCP handshake, SQLite SELECT ve yazma reddi sınandı. Gerçek ChatGPT/OpenRouter iznini kullanıcı tamamlar; sentetik test gerçek uygunluğu veya bakiyeyi kanıtlamaz.
 
 [Nous Portal](https://hermes-agent.nousresearch.com/docs/integrations/nous-portal), Hermes için abonelik/OAuth sunuyor; bu belge NIQ adına üçüncü taraf kayıt/izin koşullarını tek başına kanıtlamıyor. Hermes client ID'si kopyalanmadı. Ek abonelik sağlayıcıları kendi kayıt/izin koşullarıyla değerlendirilecek. Microsoft Entra ID ve merkezi kurum politikaları ayrı genişletmelerdir. DB entegrasyon CI işi kapsam dışıdır.
+
+OAuth dönüşü, kod içermeyen süreli sonuç adresine yönlendirilir. Başarı/hata sayfası yerel fontlar ve NIQ/sağlayıcı logolarıyla responsive gösterilir. İlk hesap ekranında ortalanmış piksel NIQ yazısı, sönümlenen imleç etkileşimi ve yavaş lacivert akış vardır; hareket azaltma tercihi desteklenir.

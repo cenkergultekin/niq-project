@@ -123,6 +123,11 @@ class DesktopBridge(QObject):
 class NIQDesktopApp(QMainWindow):
     def __init__(self):
         super().__init__()
+        from backend.services import desktop_actions
+        desktop_actions.available = True
+        self.focus_timer = QTimer(self)
+        self.focus_timer.timeout.connect(self._focus_from_browser)
+        self.focus_timer.start(250)
         self.port = free_port()
         self.origin = f"http://127.0.0.1:{self.port}"
         self.server = create_server(flask_app, host="127.0.0.1", port=self.port, threads=8)
@@ -330,10 +335,23 @@ class NIQDesktopApp(QMainWindow):
     def shutdown(self) -> None:
         """İstek işçileri bitmeden soketleri kapatmak Windows'ta WinError 10038 üretir."""
         self.timer.stop()
+        self.focus_timer.stop()
+        from backend.services import desktop_actions
+        desktop_actions.available = False
+        desktop_actions.focus_requested.clear()
         self.web_view.stop()
         self.server.task_dispatcher.shutdown(timeout=5)
         self.server.close()
         self.server_thread.join(timeout=2)
+
+    def _focus_from_browser(self):
+        from backend.services import desktop_actions
+        if desktop_actions.focus_requested.is_set():
+            desktop_actions.focus_requested.clear()
+            if self.isMinimized():
+                self.showNormal()
+            self.raise_()
+            self.activateWindow()
 
 
 def main() -> None:

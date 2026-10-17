@@ -24,6 +24,8 @@ def vault(tmp_path, monkeypatch):
     monkeypatch.setattr("keyring.set_password", lambda service, name, value: values.__setitem__(name, value))
     monkeypatch.setattr("keyring.get_password", lambda service, name: values.get(name))
     monkeypatch.setattr("keyring.delete_password", lambda service, name: values.pop(name, None))
+    from backend.routes import ai_accounts
+    monkeypatch.setattr(ai_accounts, "validate_key_account", lambda data: {**data, "model": data.get("model") or "synthetic-model"})
     return AccountStore(), values
 
 
@@ -309,10 +311,12 @@ def test_no_auth_or_account_mutation_from_cross_origin(client, auth):
 
 
 def test_oauth_local_callback_response_contains_no_callback_credentials(client, auth):
-    response = client.get("/auth/callback?state=unknown&code=secret-code&client_id=secret-client")
+    response = client.get("/auth/callback?state=unknown&code=secret-code&client_id=secret-client", follow_redirects=True)
     assert response.status_code == 400
     assert "secret" not in response.get_data(as_text=True)
     assert response.headers["Cache-Control"] == "no-store" and response.headers["Referrer-Policy"] == "no-referrer"
+    assert response.request.path.startswith('/auth/result/')
+    assert 'niq.png' in response.get_data(as_text=True) and 'chatgpt-logo-white.svg' in response.get_data(as_text=True)
 
 
 def test_refresh_cross_process_serialization(tmp_path, monkeypatch):

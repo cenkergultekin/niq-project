@@ -1,0 +1,19 @@
+:root { color-scheme: dark; font-family: 'Manrope', system-ui, sans-serif; color: #eaf1ff; background: #07101f; }
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100svh; display: grid; place-items: center; padding: 32px 20px; overflow-x: hidden; }
+.auth-atmosphere { position: fixed; inset: -35%; z-index: -1; background: radial-gradient(ellipse at 30% 40%, #153868 0, transparent 42%), radial-gradient(ellipse at 72% 65%, #092b45 0, transparent 45%); filter: blur(65px); opacity: .75; animation: drift 22s ease-in-out infinite alternate; }
+main { width: min(100%, 760px); display: flex; align-items: center; flex-direction: column; text-align: center; padding: 24px 0; }
+.auth-partners { display: flex; align-items: center; justify-content: center; gap: clamp(22px, 4vw, 42px); margin-bottom: 38px; }
+.niq-mark { width: clamp(72px, 12vw, 112px); height: auto; }
+.partner-mark { width: clamp(60px, 10vw, 88px); height: auto; }
+.auth-partners span { font-weight: 300; font-size: 26px; color: #73849e; }
+h1 { font-family: 'Poppins', 'Manrope', sans-serif; font-size: clamp(32px, 5.3vw, 62px); line-height: 1.15; font-weight: 600; letter-spacing: -.045em; margin: 0 0 22px; text-wrap: balance; }
+p { max-width: 540px; margin: 0 0 34px; color: #a8bbd7; font-size: clamp(15px, 2vw, 18px); line-height: 1.7; text-wrap: pretty; }
+button { appearance: none; border: 0; padding: 15px 28px; min-height: 52px; border-radius: 14px; font: 600 15px 'Manrope', sans-serif; color: #08182d; background: linear-gradient(120deg, #8fc7ff, #659eff); cursor: pointer; transition: transform .2s, filter .2s; }
+button:hover { transform: translateY(-2px); filter: brightness(1.08); }
+button:focus-visible { outline: 3px solid #d4e8ff; outline-offset: 5px; }
+.auth-footnote { margin-top: 24px; color: #7185a4; font-size: 12px; }
+.failure .auth-atmosphere { opacity: .55; }
+@keyframes drift { to { transform: translate(4%, -3%) rotate(6deg); } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+@media (max-width: 420px) { .auth-partners { margin-bottom: 28px; } h1 { max-width: 330px; } }
