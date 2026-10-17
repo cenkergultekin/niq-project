@@ -2,6 +2,8 @@
 # NIQ Desktop paketi. .env GÖMÜLMEZ: API anahtarı kullanıcının Ayarlar sayfasından girilir
 # ve işletim sisteminin güvenli deposunda (Windows Credential Manager) saklanır.
 
+from PyInstaller.utils.hooks import collect_submodules
+
 a = Analysis(
     ['main_desktop.py'],
     pathex=[],
@@ -25,7 +27,7 @@ a = Analysis(
         'paramiko',
         'openpyxl',
         'openai',
-    ],
+    ] + collect_submodules('sqlglot'),
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
