@@ -343,22 +343,20 @@ body.booting .top, body.booting main, body.booting .dock { visibility: hidden; }
 .access-paths { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .access-option { position: relative; display: flex; align-items: center; gap: 18px; min-width: 0; padding: 24px; text-align: left; white-space: normal; border: 0; overflow: hidden; transition: transform .25s ease, background .25s ease, box-shadow .25s ease; }
 .access-logo { flex: none; object-fit: contain; }
-.access-copy { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
 .access-title { font-family: var(--font-head); font-size: 16px; font-weight: 500; letter-spacing: -.5px; line-height: 1.4; }
-.access-description { font-size: 12px; line-height: 1.6; font-weight: 400; color: #9eafc8; }
-.access-action { margin-left: auto; font-size: 12px; flex: none; color: #d4e6ff; font-weight: 500; }
 .access-option:hover { transform: translateY(-3px); }
-.access-option.plan-choice { grid-column: 1 / -1; background: radial-gradient(ellipse at 10% 30%, #4078c054, transparent 65%), linear-gradient(115deg, #19365e, #102238); box-shadow: 0 14px 50px #010a1b33; min-height: 120px; }
+.access-option.plan-choice { grid-column: 1 / -1; background: radial-gradient(ellipse at 10% 30%, #4078c054, transparent 65%), linear-gradient(115deg, #19365e, #102238); box-shadow: 0 14px 50px #010a1b33; min-height: 96px; }
 .access-option.plan-choice:hover { box-shadow: 0 18px 60px #163b763d; }
 .plan-choice .access-title { font-size: 23px; color: #eef5ff; }
-.plan-choice .access-description { color: #b5cbe6; }
 button.access-option.chatgpt-signin { background: #080e18b3; }
 button.access-option.chatgpt-signin:hover { background: #101b2b; }
 .access-option.api-choice { background: #14263b9c; }
 .access-option.api-choice:hover, .access-option.api-choice[aria-expanded="true"] { background: #1a3552; }
 #onboarding-ai #ai-accounts > .access-paths:first-child { display: grid; }
-#onboarding-ai .access-option { justify-content: flex-start; padding: 24px; border-radius: 12px; min-height: 104px; }
-#onboarding-ai .access-option.plan-choice { min-height: 120px; }
+#onboarding-ai .access-option { justify-content: center; padding: 22px; border-radius: 14px; min-height: 82px; }
+#onboarding-ai .access-option.plan-choice { min-height: 96px; border-radius: 22px; box-shadow: inset 0 1px 0 #b7d5ff38, 0 16px 48px #020a1733; }
+#onboarding-ai .access-option.api-choice { border-radius: 8px; background: #10223866; box-shadow: inset 0 0 0 1px #8ba9ce2b; }
+#onboarding-ai .access-option.chatgpt-signin { box-shadow: inset 0 1px 0 #ffffff12; }
 #onboarding-ai .api-key-form { padding-top: 20px; }
 #onboarding-ai .api-key-form .provider-choices { margin-top: 0; }
 #niq-plan { width: min(580px, calc(100% - 32px)); padding: 44px 36px 28px; background: radial-gradient(ellipse at 50% 0, #234c805c, transparent 65%), #0c1a2e; }
@@ -370,9 +368,8 @@ button.access-option.chatgpt-signin:hover { background: #101b2b; }
 #niq-plan #niq-plan-close { width: auto; margin: 0; padding: 8px 20px; }
 @media (max-width: 640px) {
   .access-paths { grid-template-columns: minmax(0, 1fr); }
-  .access-action { display: none; }
-  #onboarding-ai .access-option { min-height: 88px; padding: 20px; }
-  #onboarding-ai .access-option.plan-choice { min-height: 112px; }
+  #onboarding-ai .access-option { min-height: 76px; padding: 20px; }
+  #onboarding-ai .access-option.plan-choice { min-height: 90px; }
   .plan-choice .access-title { font-size: 21px; }
   #niq-plan { padding: 32px 22px 24px; }
 }
