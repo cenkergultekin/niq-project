@@ -107,6 +107,12 @@ class LocalOnlyPage(QWebEnginePage):
 
 
 class DesktopBridge(QObject):
+    @Slot(result=bool)
+    def copyMcpConfiguration(self):
+        from backend.routes.ai_accounts import mcp_configuration
+        QApplication.clipboard().setText(mcp_configuration())
+        return True
+
     @Slot(result=str)
     def chooseSqliteFile(self):
         path, _ = QFileDialog.getOpenFileName(self.parent(), "SQLite veritabanını seç", "",

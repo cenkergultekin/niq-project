@@ -24,12 +24,14 @@ def test_index_references_existing_local_assets(client):
 def test_no_external_resources_so_it_works_offline():
     for path in [*STATIC.rglob("*.css"), *STATIC.joinpath("js").glob("*.js"), Path(STATIC.parent / "templates" / "index.html")]:
         text = path.read_text(encoding="utf-8")
-        found = re.findall(r'(?:src|href|url\()\s*=?\s*["\']?(https?://[^"\')\s]+)', text)
+        # Navigation links don't fetch resources until the user follows them.
+        resources = re.sub(r'<a\b[^>]*>', '', text, flags=re.IGNORECASE)
+        found = re.findall(r'(?:src|href|url\()\s*=?\s*["\']?(https?://[^"\')\s]+)', resources)
         assert not found, f"{path.name} dış kaynak yüklüyor: {found}"
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node yok")
-@pytest.mark.parametrize("name", ["core", "voice", "connect", "chat", "views"])
+@pytest.mark.parametrize("name", ["core", "voice", "connect", "chat", "accounts", "views"])
 def test_javascript_is_syntactically_valid(name):
     result = subprocess.run(["node", "--check", str(STATIC / "js" / f"{name}.js")], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr

@@ -167,6 +167,7 @@
             NIQ.state.aiReady = data.ai_service_available;
             NIQ.state.provider = data.provider || '';
             NIQ.state.model = data.model || '';
+            if ($('ai-plan')) $('ai-plan').hidden = data.provider !== 'chatgpt';
             return data;
         } catch (e) {
             return null;

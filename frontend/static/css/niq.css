@@ -285,3 +285,7 @@ button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); 
   main { padding: 0; }
   .msg-q { color: #152337; }
 }
+/* Approved SIWC black sign-in format; asset from OpenAI's SIWC docs. */
+button.chatgpt-signin { display: inline-flex; align-items: center; gap: 10px; background: #000; color: #fff; }
+button.chatgpt-signin:hover { background: #171717; }
+.chatgpt-signin img { flex: none; }

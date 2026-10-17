@@ -227,6 +227,7 @@
             try {
                 settings = (await api('/settings')).data;
                 renderSettings();
+                await NIQ.accounts.load();
                 await loadNotify();
             } catch (error) {
                 status('s-status', 'Ayarlar yüklenemedi: ' + error.message, 'error');
@@ -293,6 +294,7 @@
         NIQ.chat.bind();
         bindGlossary();
         bindSettings();
+        NIQ.accounts.bind();
         document.querySelectorAll('#links button').forEach((b) => b.addEventListener('click', () => NIQ.go(b.dataset.view)));
         $('job-plan-btn').addEventListener('click', () => {
             const text = $('job-text').value.trim();
@@ -306,7 +308,7 @@
         else if (!(await NIQ.connect.autoConnect())) NIQ.connect.show();
         const target = location.hash.slice(1);
         NIQ.go(VALID_VIEWS.includes(target) ? target : 'chat');
-        if (health && !health.ai_service_available) NIQ.toast('AI için API anahtarı gerekli: Ayarlar sayfasından ekle', 'error');
+        if (health && !health.ai_service_available) NIQ.toast('AI hesabını Ayarlar\'dan bağla', 'error');
         $('q').focus();
     }
 

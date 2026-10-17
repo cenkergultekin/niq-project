@@ -451,6 +451,7 @@
         if (window.qt?.webChannelTransport && window.QWebChannel) {
             new QWebChannel(qt.webChannelTransport, (channel) => {
                 state.desktop = channel.objects.desktop;
+                NIQ.desktop = state.desktop;
                 $('db-file-btn').hidden = !currentType().file_based;
                 $('db-source-file-btn').hidden = false;
             });

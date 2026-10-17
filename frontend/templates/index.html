@@ -213,6 +213,39 @@
         <section class="view" id="view-settings">
             <h1>Ayarlar</h1>
             <h2>AI</h2>
+            <div id="ai-accounts">
+                <div class="row">
+                    <button class="btn chatgpt-signin" id="ai-chatgpt"><img src="/static/images/chatgpt-logo-white.svg" alt="" width="20" height="20">Continue with ChatGPT</button>
+                    <button class="btn" id="ai-openrouter">OpenRouter ile bağlan</button>
+                    <button class="link-btn" id="ai-cancel" hidden>Vazgeç</button>
+                </div>
+                <p class="note" id="ai-login-status" role="status"></p>
+                <div class="grid2">
+                    <div class="field"><label for="ai-account">Sohbet hesabı</label><select id="ai-account"></select></div>
+                    <div class="field"><label for="ai-model">Model / deployment</label><input id="ai-model" list="ai-models" autocomplete="off"><datalist id="ai-models"></datalist></div>
+                    <div class="field"><label for="ai-label">Hesap adı</label><input id="ai-label" autocomplete="off"></div>
+                    <div class="field"><label for="ai-voice">Ses hesabı</label><select id="ai-voice"></select></div>
+                </div>
+                <div class="row">
+                    <button class="btn primary" id="ai-use">Hesabı kullan</button>
+                    <button class="link-btn" id="ai-model-refresh">Modelleri getir</button>
+                    <button class="link-btn" id="ai-reauth">Yeniden giriş</button>
+                    <button class="link-btn" id="ai-disconnect">Çıkış yap</button>
+                </div>
+                <details><summary>API anahtarı ekle</summary>
+                    <div class="grid2" style="margin-top:12px">
+                        <div class="field"><label for="ai-new-provider">Sağlayıcı</label><select id="ai-new-provider"></select></div>
+                        <div class="field"><label for="ai-new-label">Hesap adı</label><input id="ai-new-label" placeholder="Örn. Finans ekibi" autocomplete="off"></div>
+                        <div class="field" id="ai-new-key-field"><label for="ai-new-key">API anahtarı</label><input type="password" id="ai-new-key" autocomplete="off"></div>
+                        <div class="field" id="ai-new-url-field" hidden><label for="ai-new-url">Kaynak adresi</label><input type="url" id="ai-new-url" autocomplete="off"></div>
+                        <div class="field"><label for="ai-new-model">Model / deployment</label><input id="ai-new-model" autocomplete="off"></div>
+                    </div>
+                    <p class="note" id="ai-billing">API kullanımı sağlayıcının bakiyesinden düşer. Anahtar yalnızca işletim sisteminin güvenli kasasında saklanır.</p>
+                    <button class="btn primary" id="ai-add">Bağla</button>
+                </details>
+                <p class="status" id="ai-account-status" role="status"></p>
+            </div>
+            <details><summary>Mevcut sağlayıcı ayarı</summary>
             <div class="grid2">
                 <div class="field"><label for="s-provider">Sağlayıcı</label><select id="s-provider"></select></div>
                 <div class="field"><label for="s-model">Model</label><select id="s-model"></select><p class="note" id="s-price"></p></div>
@@ -226,6 +259,13 @@
                 <button class="btn danger" id="s-clear-key">Anahtarı sil</button>
             </div>
             <div class="status" id="s-status"></div>
+            </details>
+
+            <details><summary>MCP ile kullan</summary>
+                <p class="note">MCP istemcinin kendi modelini veya NIQ'de seçtiğin hesabı kullanır. Veritabanı parolaları ve AI anahtarları istemciye aktarılmaz.</p>
+                <button class="btn" id="ai-mcp-copy">MCP yapılandırmasını kopyala</button>
+                <pre id="ai-mcp-config" hidden></pre>
+            </details>
 
             <details>
                 <summary>Gelişmiş</summary>
@@ -254,6 +294,7 @@
     <footer class="dock" id="dock">
         <div class="dock-inner">
             <div class="cmd-list" id="cmd-list" hidden></div>
+            <div id="ai-plan" class="note" hidden>ChatGPT planı kullanılıyor · <a href="https://chatgpt.com/settings/usage" rel="noreferrer">Kullanımı yönet</a></div>
             <div class="bar">
                 <textarea id="q" rows="1" placeholder="Verilerine sor…" aria-label="Sorun" autocomplete="off"></textarea>
                 <div class="composer-tools">
@@ -273,12 +314,18 @@
         <p id="confirm-text"></p>
         <div class="row"><button class="btn" id="confirm-no">Vazgeç</button><button class="btn primary" id="confirm-yes">Onayla</button></div>
     </dialog>
+    <dialog class="confirm" id="ai-welcome">
+        <h3>ChatGPT planını kullanıyorsun</h3>
+        <p>Uygun sohbet istekleri ChatGPT planından karşılanır. Ses tanıma, ayrıca seçtiğin API hesabından ücretlendirilir.</p>
+        <div class="row"><a href="https://chatgpt.com/settings/usage" rel="noreferrer">Kullanımı yönet</a><button class="btn primary" id="ai-welcome-dismiss">Tamam</button></div>
+    </dialog>
     <div id="toast" hidden></div>
 
     <script src="/static/js/core.js"></script>
     <script src="/static/js/voice.js"></script>
     <script src="/static/js/connect.js"></script>
     <script src="/static/js/chat.js"></script>
+    <script src="/static/js/accounts.js"></script>
     <script src="/static/js/views.js"></script>
 </body>
 </html>

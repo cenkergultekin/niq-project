@@ -328,11 +328,14 @@
     function errorBlock(error, question) {
         const payload = error.payload || {};
         const block = el('div', {}, el('p', { class: 'error-text', text: error.message }));
+        const planLimit = NIQ.state.provider === 'chatgpt' && error.message.includes('chatgpt.com/settings/usage');
+        if (planLimit) block.appendChild(el('div', { class: 'actions' },
+            el('a', { class: 'btn primary', href: 'https://chatgpt.com/settings/usage', rel: 'noreferrer', text: 'Kullanımı yönet' })));
         if (payload.sql) block.appendChild(el('pre', { class: 'sqlbox', text: payload.sql }));
         if (payload.error_code === 'AI_UNAVAILABLE') {
             block.appendChild(el('div', { class: 'actions' }, el('button', { class: 'link-btn', text: 'Ayarlar\'a git', onclick: () => NIQ.go('settings') })));
         }
-        if (question && error.status !== 503) {
+        if (question && error.status !== 503 && !planLimit) {
             block.appendChild(el('div', { class: 'actions' }, el('button', { class: 'link-btn', text: 'Yeniden dene', onclick: () => ask(question) })));
         }
         return block;
