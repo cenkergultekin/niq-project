@@ -19,7 +19,7 @@
             document.querySelector('.top').hidden = true;
             NIQ.go('onboarding');
             await NIQ.accounts.load();
-            const advance = async () => {
+            const advance = async (userInitiated = false) => {
                 if (advancing || !NIQ.state.onboarding || $('onboarding-account').hidden) return;
                 advancing = true;
                 say('Hesap doğrulanıyor…');
@@ -32,10 +32,13 @@
                     $('onboarding-databases').hidden = false;
                     say('');
                 } catch (error) {
-                    if (!error.cancelled) say(error.message);
+                    say('');
+                    $('ai-login-status').textContent = '';
+                    $('ai-account-status').textContent = userInitiated && !error.cancelled
+                        ? 'Bu hesapla bağlantı kurulamadı.' : '';
                 } finally { advancing = false; }
             };
-            window.addEventListener('niq-account-connected', advance);
+            window.addEventListener('niq-account-connected', () => advance(true));
             if (NIQ.accounts.isConnected()) advance();
             $('onboarding-discover').onclick = async () => {
                 $('onboarding-discover').disabled = true;

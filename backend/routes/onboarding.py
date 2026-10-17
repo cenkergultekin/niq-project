@@ -46,7 +46,7 @@ def verify_account():
         if not answer.strip():
             raise AIServiceError("No completed text")
     except (AIServiceError, AIUnavailableError):
-        raise ValidationError("Hesap doğrulanamadı. Girişini, kullanım iznini ve bakiyeyi kontrol et.") from None
+        raise ValidationError("Bu hesapla bağlantı kurulamadı.") from None
     session["AI_VERIFIED"] = account
     return jsonify(ok({"verified": True}))
 

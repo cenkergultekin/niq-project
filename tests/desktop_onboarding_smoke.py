@@ -27,6 +27,7 @@ def main():
     from backend.services.ai_service import AIService
 
     calls = []
+    failure_mode = "--verification-failure" in sys.argv
     AIService.suggest_questions = lambda *args, **kwargs: ["Kaç sipariş var?"]
     import keyring
     vault = {}
@@ -38,6 +39,16 @@ def main():
         return {**data, "model": "gpt-6-luna"}
     ai_accounts.validate_key_account = valid_key
     ai_accounts.provider_models = lambda config: [{"id": "gpt-6-luna", "name": "Luna"}, {"id": "gpt-4o-mini", "name": "Mini"}]
+    if failure_mode:
+        from backend.config.config import Settings
+        from backend.services.ai_accounts import AccountStore
+        from backend.services.ai_service import AIServiceError
+        item = AccountStore().add_key({"provider": "openai", "label": "Synthetic", "api_key": "synthetic", "model": "gpt-6-luna"})
+        Settings.save({"ai_account_id": item["id"]})
+        def denied(*args, **kwargs):
+            calls.append("verification-denied")
+            raise AIServiceError("synthetic denied")
+        AIService._complete = denied
     original = onboarding.collect_catalog
     def collect(*args):
         calls.append("names")
@@ -77,6 +88,14 @@ def main():
             if not data.get("ready"):
                 return
             js = ""
+            if failure_mode:
+                if "verification-denied" not in calls or data["onboardingStatus"]:
+                    return
+                assert data["onboarding"] and data["account"] and not data["permission"]
+                assert data["accountStatus"] == "" and data["noRetry"]
+                checks.append("stored-account-failure-no-large-error-no-access-bypass")
+                finish()
+                return
             if stage == 0:
                 if not data["onboarding"] or not data["account"]:
                     return
@@ -179,6 +198,8 @@ def main():
                 onboarding:!!window.NIQ?.state.onboarding, account:document.querySelectorAll('.provider-choice').length===7,
                 noContinue:!document.getElementById('onboarding-next'),keyForm:!document.getElementById('ai-key-form')?.hidden,
                 overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+1,
+                onboardingStatus:document.getElementById('onboarding-status')?.textContent,
+                accountStatus:document.getElementById('ai-account-status')?.textContent,
                 noRetry:!document.getElementById('onboarding-retry'),turkish:document.getElementById('ai-chatgpt')?.textContent.includes('ChatGPT ile devam et'),
                 noProviderHeading:!document.getElementById('ai-provider-label'),plan:!!document.getElementById('niq-plan')?.open,planWidth:document.getElementById('niq-plan')?.getBoundingClientRect().width,
                 centered:(()=>{const r=document.getElementById('onboarding-account').getBoundingClientRect();return Math.abs(r.x+r.width/2-document.documentElement.clientWidth/2)<3;})(),

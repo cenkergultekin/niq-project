@@ -322,6 +322,7 @@ body.booting .top, body.booting main, body.booting .dock { visibility: hidden; }
 #onboarding-ai > #ai-accounts > .grid2,
 #onboarding-ai > #ai-accounts > .row:not(:first-child) { display: none; }
 #view-onboarding #ai-account-status:empty { display: none; }
+#view-onboarding #ai-account-status { font-size: 12px; font-weight: 400; color: var(--muted); margin-top: 14px; }
 .api-choice { display: inline-flex; align-items: center; gap: 10px; }
 .api-key-form { max-width: 560px; padding-top: 24px; }
 .provider-choices { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 18px; }
