@@ -36,6 +36,14 @@ a = Analysis(
     noarchive=False,
 )
 
+# Qt'nin Windows ICU API'si işletim sisteminden gelir. PATH'teki Poppler gibi
+# araçların aynı adlı ICU derlemesi uyumsuz sembollerle QtCore açılışını bozar.
+# İşletim sistemine ait bu DLL'i paket içine gömerek gölgeleme.
+import sys
+
+if sys.platform == 'win32':
+    a.binaries = [entry for entry in a.binaries if entry[0].lower() != 'icuuc.dll']
+
 pyz = PYZ(a.pure)
 
 exe = EXE(
