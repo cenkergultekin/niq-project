@@ -129,6 +129,10 @@ def run_analysis(connector: Connector, ai: AIService, history: HistoryStore, kno
         message = ai.chat(messages, TOOLS)
         calls = list(message.tool_calls or [])
         assistant: Dict[str, Any] = {"role": "assistant", "content": message.content or ""}
+        if getattr(message, "response_items", None) is not None:
+            assistant["_response_items"] = message.response_items
+        if getattr(message, "anthropic_blocks", None) is not None:
+            assistant["_anthropic_blocks"] = message.anthropic_blocks
         if calls:
             assistant["tool_calls"] = [
                 {"id": c.id, "type": "function", "function": {"name": c.function.name, "arguments": c.function.arguments}}

@@ -11,6 +11,7 @@ from flask import Flask, abort, render_template, request
 
 from backend.config.config import Config
 from backend.core.utils import setup_logging
+from backend.routes.ai_accounts import accounts_bp
 from backend.routes.routes import api_bp
 
 # PyInstaller paketinde şablon ve statik dosyalar _MEIPASS altındadır
@@ -41,10 +42,13 @@ def create_app() -> Flask:
             abort(403)
         origin = request.headers.get("Origin")
         if origin and request.method not in ("GET", "HEAD", "OPTIONS"):
-            if urlparse(origin).hostname not in LOCAL_HOSTNAMES:
+            if urlparse(origin).netloc != request.host:
                 abort(403)
+        if request.method not in ("GET", "HEAD", "OPTIONS") and request.headers.get("Sec-Fetch-Site") == "cross-site":
+            abort(403)
 
     app.register_blueprint(api_bp)
+    app.register_blueprint(accounts_bp)
 
     @app.route("/")
     def index():

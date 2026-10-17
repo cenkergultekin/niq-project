@@ -95,6 +95,9 @@ PROVIDERS: Dict[str, Dict[str, Any]] = {
 }
 
 DEFAULT_SETTINGS: Dict[str, Any] = {
+    "ai_account_id": "",
+    "voice_account_id": "",
+    "chatgpt_welcome_seen": False,
     "last_connection_id": "",
     "provider": "openrouter",
     "models": {name: p["default_model"] for name, p in PROVIDERS.items()},

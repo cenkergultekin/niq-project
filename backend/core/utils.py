@@ -12,6 +12,14 @@ from backend.config.config import data_dir
 logger = logging.getLogger(__name__)
 
 
+class OAuthLogFilter(logging.Filter):
+    """Development access logs must not persist authorization callback parameters."""
+    def filter(self, record):
+        if "/auth/callback" in record.getMessage():
+            record.msg, record.args = "NIQ OAuth callback handled", ()
+        return True
+
+
 class ValidationError(Exception):
     """Kullanıcıya gösterilebilecek doğrulama hatası."""
 
@@ -51,17 +59,19 @@ def setup_logging(level: str = "INFO") -> None:
     root.setLevel(getattr(logging, level.upper(), logging.INFO))
     console = logging.StreamHandler()
     console.setFormatter(fmt)
+    console.addFilter(OAuthLogFilter())
     root.addHandler(console)
     try:
         log_dir = data_dir() / "logs"
         log_dir.mkdir(exist_ok=True)
         file_handler = RotatingFileHandler(log_dir / "niq.log", maxBytes=1_000_000, backupCount=3, encoding="utf-8")
         file_handler.setFormatter(fmt)
+        file_handler.addFilter(OAuthLogFilter())
         root.addHandler(file_handler)
     except OSError:
         pass
     # HTTP istemcilerinin ayrıntı loglarında başlık/anahtar sızmasın
-    for noisy in ("httpx", "httpcore", "openai"):
+    for noisy in ("httpx", "httpcore", "httpx2", "httpcore2", "openai", "anthropic"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
     root._niq_configured = True  # type: ignore[attr-defined]
 

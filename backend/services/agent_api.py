@@ -8,7 +8,6 @@ tablo notları, doğrulanmış örnekler ve denetim kaydı. Kimlik bilgisi alan 
 import logging
 from typing import Any, Dict, List, Optional
 
-from backend.config.config import Settings
 from backend.core.utils import ValidationError
 from backend.db.connector import Connector
 from backend.db.profiles import Profile, ProfileStore
@@ -37,6 +36,8 @@ class AgentAPI:
     def ai(self) -> AIService:
         if self._ai is None:
             self._ai = AIService()
+        elif isinstance(self._ai, AIService):
+            self._ai.reconfigure()
         return self._ai
 
     def _profile(self, connection: str) -> Profile:
@@ -152,6 +153,6 @@ class AgentAPI:
                  "row_count": r["row_count"], "rows": (r["rows"] or [])[:10]} for r in runs]
 
     def status(self) -> Dict[str, Any]:
-        config = Settings.ai_config()
-        return {"connections": len(self.profiles.list()), "ai_provider": config["provider"], "ai_model": config["model"],
-                "ai_ready": bool(config["api_key"]), "reports": len(self.jobs.list())}
+        config = self.ai.config
+        return {"connections": len(self.profiles.list()), "ai_provider": config["provider"], "ai_model": self.ai.model,
+                "ai_ready": self.ai.ai_available, "reports": len(self.jobs.list())}

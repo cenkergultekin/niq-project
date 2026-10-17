@@ -905,7 +905,7 @@ def update_settings():
         Settings.set_api_key(key_provider, str(data["api_key"]).strip())
 
     Settings.save(updates)
-    state.ai_service.reconfigure()
+    state.ai_service = AIService()
     return jsonify(ok(_settings_payload(), "Ayarlar kaydedildi."))
 
 

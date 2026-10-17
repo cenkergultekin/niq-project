@@ -13,9 +13,12 @@ paramiko>=3.4            # SSH tüneli
 pywin32-ctypes>=0.2.2; sys_platform == "win32"
 
 # AI (OpenAI / OpenRouter / yerel OpenAI-uyumlu sunucular)
-openai>=2.3.0
+openai>=3.31.0
 requests>=2.31.0
 python-dotenv>=1.0.0
+PyJWT[crypto]>=2.10
+filelock>=3.16
+anthropic>=1.15.0
 
 # Excel dışa aktarma
 openpyxl>=3.1

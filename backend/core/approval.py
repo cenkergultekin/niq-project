@@ -10,6 +10,9 @@ agent (CLI) `--yes` ile açıkça onaylar.
 from typing import Any, Dict
 
 CRITICAL_ACTIONS = {
+    "save_ai_account": "AI hesabını ve API anahtarını bu bilgisayarın güvenli kasasına kaydet ve sohbet için seç",
+    "connect_ai_account": "Sağlayıcıya tarayıcıdan giriş yap; verdiğin izinle hesabını NIQ'ye bağla ve giriş bilgilerini güvenli kasada sakla",
+    "disconnect_ai_account": "Bu AI hesabının yerel giriş bilgilerini kaldır; ChatGPT yenileme iznini sağlayıcıda iptal etmeyi dene",
     "read_connection_credentials": "Seçtiğin yerel sunucunun veritabanı bağlantı bilgilerini NIQ'de kullan. Parola ekranda gösterilmez ve kaydedilmez",
     "discover_database_catalog": "Yerel sunucuların ve kayıtlı bağlantıların erişim bilgilerini NIQ'de kullanarak erişilebilir veritabanlarını bul. Sırlar gösterilmez/kaydedilmez; yalnızca veritabanı ve tablo adları okunur",
     "save_connection": "Bağlantı profilini ve parolasını bu bilgisayara kaydet",

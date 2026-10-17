@@ -14,8 +14,10 @@ from typing import Any, Dict, List, Optional
 from openai import APIStatusError, BadRequestError, OpenAI
 
 from backend.config.config import Settings
+from backend.core.utils import ValidationError
 from backend.db.dialects import Dialect, get_dialect
 from backend.models.models import DatabaseSchema, SavedQuery
+from backend.services.ai_accounts import AccountStore, selected_config
 
 logger = logging.getLogger(__name__)
 
@@ -134,16 +136,20 @@ class AIUnavailableError(Exception):
 
 
 class AIService:
-    def __init__(self):
+    def __init__(self, config=None):
         self.client: Optional[OpenAI] = None
         self.config: Dict[str, Any] = {}
-        self.reconfigure()
+        self.reconfigure(config)
 
     # --- yapılandırma -----------------------------------------------------
-    def reconfigure(self) -> None:
+    def reconfigure(self, config=None) -> None:
         """Ayarları (sağlayıcı, model, anahtar) yeniden okuyup istemciyi kurar."""
-        self.config = Settings.ai_config()
         self.client = None
+        try:
+            self.config = config or selected_config(refresh=False)
+        except ValidationError:
+            self.config = {"provider": "unavailable", "model": "", "api_key": None}
+            return
         if not self.config["api_key"]:
             logger.info("AI sağlayıcısı (%s) için API anahtarı yok", self.config["provider"])
             return
@@ -152,12 +158,18 @@ class AIService:
             kwargs["base_url"] = self.config["base_url"]
         if self.config["provider"] == "openrouter":
             kwargs["default_headers"] = {"X-Title": "NIQ Desktop"}
-        self.client = OpenAI(**kwargs)
+        if self.config["provider"] == "anthropic":
+            from anthropic import Anthropic
+            self.client = Anthropic(**kwargs)
+        else:
+            if self.config["provider"] == "chatgpt":
+                kwargs["max_retries"] = 0
+            self.client = OpenAI(**kwargs)
         logger.info("AI hazır: %s / %s", self.config["provider"], self.config["model"])
 
     @property
     def ai_available(self) -> bool:
-        return self.client is not None
+        return self.client is not None and bool(self.model)
 
     @property
     def model(self) -> str:
@@ -182,6 +194,26 @@ class AIService:
 
     def _send(self, params: Dict[str, Any]):
         """İstek gönderir. Şema/temperature desteklenmezse parametreyi çıkarıp yeniden dener."""
+        if self.config["provider"] in ("chatgpt", "anthropic"):
+            from backend.services.ai_adapters import anthropic_send, chatgpt_send
+            try:
+                if self.config["provider"] == "chatgpt":
+                    self.client.api_key = AccountStore().chatgpt_credentials(self.config["account_id"])["access_token"]
+                    return chatgpt_send(self.client, params)
+                return anthropic_send(self.client, params)
+            except ValidationError as exc:
+                raise AIServiceError(str(exc)) from None
+            except APIStatusError as exc:
+                if self.config["provider"] == "chatgpt":
+                    code = getattr(exc, "code", "")
+                    if exc.status_code == 429 or code in ("subscription_sharing_usage_limit_exceeded", "subscription_sharing_usage_unavailable"):
+                        raise AIServiceError("ChatGPT plan kullanım limiti veya erişimi uygun değil. "
+                                             "Kullanımı yönet: https://chatgpt.com/settings/usage") from None
+                    if exc.status_code in (401, 403):
+                        raise AIServiceError("ChatGPT oturumu veya plan izni geçersiz. Ayarlar'dan yeniden giriş yap.") from None
+                raise AIServiceError("AI sağlayıcısı isteği reddetti. Hesabını, modelini ve kullanım limitini kontrol et.") from None
+            except Exception:
+                raise AIServiceError("AI sağlayıcısı isteği tamamlamadı. Hesabını ve modelini kontrol et.") from None
         for _ in range(3):
             try:
                 return self.client.chat.completions.create(**params)
@@ -346,10 +378,20 @@ class AIService:
 
     def transcribe(self, audio: bytes, fmt: str = "wav", language: str = "tr") -> str:
         """Konuşmayı metne çevirir. OpenAI: ses-metin ucu; OpenRouter: ses girdili model (ayarlardaki stt_model)."""
+        if Settings.load().get("ai_account_id") or Settings.load().get("voice_account_id"):
+            try:
+                config = selected_config("voice")
+            except ValidationError as exc:
+                raise AIUnavailableError(str(exc)) from None
+            voice = AIService(config=config)
+            return voice._transcribe(audio, fmt, language)
+        return self._transcribe(audio, fmt, language)
+
+    def _transcribe(self, audio: bytes, fmt: str, language: str) -> str:
         if not self.client:
             raise AIUnavailableError("Sesli sorgu için API anahtarı ayarlanmamış. Ayarlar sayfasından ekleyin.")
         provider = self.config["provider"]
-        if provider == "local":
+        if provider not in ("openai", "openrouter"):
             raise AIServiceError("Sesli sorgu için OpenRouter veya OpenAI sağlayıcısı gerekli (yerel modelde ses desteği yok).")
         if provider == "openai":
             try:
