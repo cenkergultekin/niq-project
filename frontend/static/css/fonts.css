@@ -1,4 +1,11 @@
 /* Yerel font dosyaları (Google Fonts, SIL OFL). Çevrimdışı çalışır. */
+@font-face {
+  font-family: 'Manrope';
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url('/static/vendor/fonts/manrope-variable.ttf') format('truetype');
+}
 /* Poppins latin-ext */
 @font-face {
   font-family: 'Poppins';

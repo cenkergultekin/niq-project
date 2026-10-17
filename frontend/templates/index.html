@@ -6,13 +6,13 @@
     <title>NIQ</title>
     <link rel="stylesheet" href="/static/css/fonts.css">
     <link rel="icon" href="/static/images/niq.png" type="image/png">
-    <link rel="stylesheet" href="/static/css/niq.css?v=6.0">
+    <link rel="stylesheet" href="/static/css/niq.css?v=6.1">
     <script src="/static/vendor/chart.umd.min.js"></script>
 </head>
 <body>
     <div class="ambient" aria-hidden="true"><i></i><i></i><i></i></div>
     <header class="top">
-        <button class="brand" id="brand" title="Yeni konuşma" aria-label="NIQ, yeni konuşma"><img src="/static/images/niq.png" width="32" height="32" alt="">NIQ</button>
+        <button class="brand" id="brand" title="Yeni konuşma" aria-label="NIQ, yeni konuşma"><img src="/static/images/niq.png" width="32" height="32" alt=""></button>
         <button class="pill" id="conn-pill" title="Bağlantıyı aç"><span class="dot" id="conn-dot"></span><span id="conn-label">Bağlı değil</span></button>
         <nav class="links" id="links">
             <button data-view="history">Geçmiş</button>
@@ -256,15 +256,16 @@
         <div class="dock-inner">
             <div class="cmd-list" id="cmd-list" hidden></div>
             <div class="bar">
-                <textarea id="q" rows="1" placeholder="Bir şey sor" autocomplete="off"></textarea>
+                <textarea id="q" rows="1" placeholder="Bir şey sor…" aria-label="Sorun" autocomplete="off"></textarea>
+                <div class="composer-tools">
                 <button class="icon-btn" id="mic" title="Konuşarak sor" aria-label="Konuşarak sor">
                     <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
                 </button>
                 <button class="icon-btn go" id="send" title="Gönder" aria-label="Gönder">
                     <svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
                 </button>
+                </div>
             </div>
-            <p class="hint" id="hint">Enter gönderir. / ile komutlar, Ctrl+K ile komut çubuğu.</p>
         </div>
     </footer>
 

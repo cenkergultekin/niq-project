@@ -203,6 +203,7 @@ dialog.confirm .row { justify-content: flex-end; margin: 0; }
 /* Mavi atmosfer. Yalnızca transform hareket eder; içerik sabit ve okunaklı kalır. */
 :root {
   color-scheme: dark;
+  --font-body: 'Manrope', system-ui, 'Segoe UI', sans-serif;
   --bg: #081324;
   --surface: #12233bd9;
   --surface-2: #1d3553;
@@ -227,7 +228,7 @@ body { isolation: isolate; }
   to { transform: translate3d(18%, 14%, 0) rotate(24deg) scale(1.18); }
 }
 .top { background: #08132499; backdrop-filter: blur(18px); padding-top: 20px; padding-bottom: 20px; }
-.brand { display: inline-flex; align-items: center; gap: 10px; font-size: 19px; letter-spacing: -.5px; }
+.brand { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 9px; }
 .brand img { object-fit: contain; }
 .pill { background: #18314b99; color: #b7cce6; }
 .dot.on { box-shadow: 0 0 12px #67dec04d; }
@@ -239,15 +240,19 @@ body { isolation: isolate; }
 .chip { background: #16304d99; padding: 11px 17px; transition: background .18s, transform .18s; }
 .chip:hover { transform: translateY(-2px); background: #24507999; }
 .dock { padding-bottom: 28px; background: linear-gradient(to top, #081324 10%, #081324d9 55%, transparent); z-index: 6; }
-.bar { background: linear-gradient(125deg, #213a56ee, #12253fee); padding: 13px 13px 13px 23px; border-radius: 23px; box-shadow: inset 0 1px 0 #b2d9ff24, 0 18px 60px #0005; backdrop-filter: blur(22px); transition: box-shadow .18s; }
-.bar:focus-within { box-shadow: inset 0 1px 0 #b2d9ff3d, 0 0 0 2px #6aaeff33, 0 18px 60px #0005; }
-.icon-btn { border-radius: 14px; width: 42px; height: 42px; }
+.bar { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 20px; background: #0d1d30e6; padding: 15px 15px 15px 22px; border-radius: 18px; box-shadow: inset 0 0 0 1px #a6c9ff1c, 0 12px 45px #02081266; backdrop-filter: blur(22px); transition: box-shadow .18s; }
+.bar:focus-within { box-shadow: inset 0 0 0 1px #7baef65c, 0 12px 45px #02081266; }
+.bar textarea { min-width: 0; width: 100%; padding: 8px 0; font-size: 15px; font-weight: 450; letter-spacing: -.2px; }
+.composer-tools { display: flex; align-items: center; gap: 8px; }
+.icon-btn { border-radius: 11px; width: 38px; height: 38px; }
 .icon-btn.go, .btn.primary { background: linear-gradient(135deg, #8ac4ff, #5795f8); color: #081a31; }
+.icon-btn.go { background: #c3ddff; color: #102440; }
 .icon-btn.go.loading { opacity: 1; cursor: progress; }
 .icon-btn.go.loading svg { display: none; }
 .icon-btn.go.loading::after { content: ''; width: 17px; height: 17px; border: 2px solid #081a3133; border-top-color: currentColor; border-radius: 50%; animation: niq-spin .8s linear infinite; }
 @keyframes niq-spin { to { transform: rotate(360deg); } }
 .hint { opacity: .75; margin-top: 12px; }
+.links button, .pill, .chip { font-weight: 500; letter-spacing: -.15px; }
 .msg { margin: 38px 0; }
 .msg-q { color: #c5dfff; }
 .sqlbox, .tablewrap, .chartbox { background: #10233ae6; }
