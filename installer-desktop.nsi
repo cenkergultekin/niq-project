@@ -2,7 +2,7 @@
 !define APP_NAME "NIQ Desktop"
 !define APP_VERSION "3.0.0"
 !define APP_PUBLISHER "A'im Done Ekibi"
-!define APP_URL "https://github.com/cenkergultekin/berkay-sql-project"
+!define APP_URL "https://github.com/cenkergultekin/niq-project"
 !define APP_EXE "NIQ-Desktop.exe"
 !define INSTALL_DIR "$PROGRAMFILES64\${APP_NAME}"
 !define UNINST_NAME "Uninstall.exe"
@@ -35,6 +35,7 @@ Section "${APP_NAME}" SecMain
 
   ; Zorunlu: dist\NIQ-Desktop.exe bu script ile aynı repo klasöründeki dist altında olmalı
   File "dist\${APP_EXE}"
+  File "dist\NIQ-MCP.exe"
   File /nonfatal "LICENSE.txt"
 
   ; Masaüstü kısayolu
@@ -68,6 +69,7 @@ Section "Uninstall"
   RMDir  "$SMPROGRAMS\${APP_NAME}"
 
   Delete "${INSTALL_DIR}\${APP_EXE}"
+  Delete "${INSTALL_DIR}\NIQ-MCP.exe"
   Delete "${INSTALL_DIR}\${UNINST_NAME}"
   Delete "${INSTALL_DIR}\LICENSE.txt"
   RMDir  "${INSTALL_DIR}"

@@ -13,7 +13,7 @@ from backend.core.sql_guard import validate_sql
 from backend.core.utils import ValidationError
 from backend.db.connector import Connector
 from backend.models.models import SavedQuery
-from backend.services.ai_service import AIService
+from backend.services.ai_service import AIService, query_budget, remaining_query_time
 from backend.services.history import HistoryStore
 from backend.services.knowledge import KnowledgeStore, stems
 
@@ -146,6 +146,7 @@ def suggest_tables(connector: Connector, history: HistoryStore, question: str, l
 
 
 # --- ana akış --------------------------------------------------------------------------
+@query_budget
 def run_question(
     connector: Connector, ai: AIService, history: HistoryStore, knowledge: KnowledgeStore, question: str,
     tables: Optional[List[str]] = None, conversation: Optional[Conversation] = None,
@@ -178,6 +179,7 @@ def run_question(
     used: List[str] = list(provided)
     attempts = 0
     for attempts in range(1, Config.REPAIR_ATTEMPTS + 2):
+        remaining_query_time()
         context = knowledge.prompt_context(connector.db_key, provided, question, bool(settings.get("ai_value_samples")))
         answer = ai.generate_sql(question, schema, examples, previous_sql, previous_error, dialect=dialect,
                                  context=context, turns=turns)

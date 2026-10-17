@@ -22,6 +22,8 @@ Workflow: list_connections -> list_tables -> describe_tables -> ask (natural lan
 Always call get_glossary first when the question uses business terms: it holds the user's definitions
 (e.g. what counts as an 'active customer'); follow them exactly. Queries are validated (single SELECT only), run in a
 read-only session and row-limited. If ask or run_sql returns an error, read it and retry with a corrected query.
+If status says ai_ready=false, use your own model to write SELECT and call run_sql; no NIQ AI key is required.
+ask uses the account the user selected in NIQ, including an authorized ChatGPT plan. Never request or export keys.
 You cannot create connections, schedules or notification channels; ask the user to do that in NIQ."""
 
 

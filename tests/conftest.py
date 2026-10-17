@@ -17,6 +17,9 @@ def client(monkeypatch):
     from backend.config.config import Settings
 
     monkeypatch.setattr(Settings, "get_api_key", staticmethod(lambda provider: None if provider != "local" else "local"))
+    from backend.routes.routes import state
+    from backend.services.ai_service import AIService
+    monkeypatch.setattr(state, "ai_service", AIService())
     app.config["TESTING"] = True
     return app.test_client()
 

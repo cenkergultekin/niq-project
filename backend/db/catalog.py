@@ -1,7 +1,9 @@
-"""İzin verilen kaynaklarda erişilebilir DB/şema envanteri. Satır verisi okunmaz."""
+"""Consent-bound local database NAMES only; never inspect tables, schemas or rows."""
+import socket
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
+from pathlib import Path
 
 from backend.db import diagnostics
 from backend.db.connector import Connector
@@ -15,6 +17,9 @@ def collect_catalog(store, grants):
     unavailable = []
     # Kaydedilmiş profillerdeki hesap yalnızca mevcut OS kasasından alınır.
     for profile in store.list():
+        local_hosts = {"localhost", "127.0.0.1", "::1", ".", socket.gethostname().lower()}
+        if profile.uses_ssh or (profile.type != "sqlite" and profile.host.lower().split("\\")[0] not in local_hosts):
+            continue
         sources.append((profile, get_password(profile) or "", profile.name))
     discovered = diagnostics.discover(store)
     for source in discovered["local_servers"]:
@@ -53,23 +58,17 @@ def collect_catalog(store, grants):
             else:
                 candidates.extend(result)
 
-    def inspect_database(source):
+    def describe_name(source):
         profile, password, label = source
-        connector = Connector(profile, password=password)
-        try:
-            tables = connector.get_tables()
-            # Yalnızca gerçekten giriş ve metadata okuması yapılabilen DB'ler sunulur.
-            named = replace(profile, name=f"{label} / {profile.database}")
-            return {"id": grants.issue(named, password, database_locked=True), "name": profile.database,
-                    "platform": profile.type, "platform_label": DIALECTS[profile.type].label, "source": label,
-                    "table_count": len(tables), "recommended": bool(tables), "tables": tables}
-        except Exception:
-            return None
-        finally:
-            connector.close()
+        name = Path(profile.database).name if profile.type == "sqlite" else profile.database
+        named = replace(profile, name=f"{label} / {name}")
+        system = {"master", "tempdb", "model", "msdb", "postgres", "template0", "template1", "mysql",
+                  "information_schema", "performance_schema", "sys"}
+        return {"id": grants.issue(named, password, database_locked=True), "name": name,
+                "platform": profile.type, "platform_label": DIALECTS[profile.type].label, "source": label,
+                "recommended": name.lower() not in system}
 
     unique = {profile.key: (profile, password, label) for profile, password, label in candidates}
-    with ThreadPoolExecutor(max_workers=8) as pool:
-        databases_ = [item for item in pool.map(inspect_database, unique.values()) if item]
+    databases_ = [describe_name(source) for source in unique.values()]
     return {"databases": databases_, "platform_count": len({item["platform"] for item in databases_}),
             "database_count": len(databases_), "unavailable": unavailable}

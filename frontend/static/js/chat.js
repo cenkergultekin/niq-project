@@ -328,11 +328,14 @@
     function errorBlock(error, question) {
         const payload = error.payload || {};
         const block = el('div', {}, el('p', { class: 'error-text', text: error.message }));
+        const planLimit = NIQ.state.provider === 'chatgpt' && error.message.includes('chatgpt.com/settings/usage');
+        if (planLimit) block.appendChild(el('div', { class: 'actions' },
+            el('a', { class: 'btn primary', href: 'https://chatgpt.com/settings/usage', rel: 'noreferrer', text: 'Kullanımı yönet' })));
         if (payload.sql) block.appendChild(el('pre', { class: 'sqlbox', text: payload.sql }));
         if (payload.error_code === 'AI_UNAVAILABLE') {
             block.appendChild(el('div', { class: 'actions' }, el('button', { class: 'link-btn', text: 'Ayarlar\'a git', onclick: () => NIQ.go('settings') })));
         }
-        if (question && error.status !== 503) {
+        if (question && error.status !== 503 && !planLimit) {
             block.appendChild(el('div', { class: 'actions' }, el('button', { class: 'link-btn', text: 'Yeniden dene', onclick: () => ask(question) })));
         }
         return block;
@@ -355,12 +358,20 @@
         NIQ.go('chat');
         setBusy(true);
         const body = addMessage(text);
+        const started = Date.now();
+        const pendingText = body.querySelector('p');
+        pendingText.setAttribute('role', 'status');
+        const waitTimer = setInterval(() => {
+            const seconds = Math.floor((Date.now() - started) / 1000);
+            pendingText.textContent = `Yanıt hazırlanıyor · ${seconds} sn`;
+        }, 1000);
         try {
             const data = (await api('/query', { body: { question: text, conversation_id: NIQ.state.conversationId, mode: (options && options.mode) || 'auto' } }));
             NIQ.clear(body).appendChild(data.mode === 'analysis' ? analysisBlock(data, text) : resultBlock(data, text));
         } catch (error) {
             NIQ.clear(body).appendChild(error.cancelled ? el('p', { class: 'note', text: 'İptal edildi.' }) : errorBlock(error, text));
         } finally {
+            clearInterval(waitTimer);
             setBusy(false);
             scrollDown();
         }

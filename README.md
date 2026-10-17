@@ -1,6 +1,14 @@
 # NIQ Desktop - Natural Intelligence Query
 
-Doğal dilde sorduğunuz soruları Microsoft SQL Server için salt-okunur, doğrulanmış T-SQL sorgularına çeviren masaüstü uygulaması. PySide6 (Qt WebEngine) arayüzü, yerel Flask API'si ve OpenAI / OpenRouter / yerel (Ollama, LM Studio) model desteği.
+Doğal dil sorularını SQL Server, PostgreSQL, MySQL/MariaDB ve SQLite üzerinde salt-okunur, doğrulanmış sorgulara çeviren masaüstü uygulaması. PySide6 arayüzü, yerel Flask API'si, ChatGPT planı ve çoklu AI hesabı desteği.
+
+## AI hesabı bağlama
+
+İlk açılışta **Continue with ChatGPT** veya **API anahtarı ekle** seçilir. Giriş zorunludur; doğrulanan bağlantı başarı mesajından sonra otomatik olarak veritabanı izin ekranına ilerler. ChatGPT'nin yerel açık kaynak uygulamalar için resmî akışı kullanılır; plan uygunluğu sağlayıcıda belirlenir.
+
+API formunda yalnızca logolu sağlayıcı seçimi, isim ve anahtar vardır: OpenAI, Anthropic, OpenRouter, Gemini, Groq (Llama), Mistral ve DeepSeek. Aynı sağlayıcıya birden fazla hesap eklenebilir. Azure seçeneği, yönetici `AZURE_OPENAI_ENDPOINT` ve `AZURE_OPENAI_DEPLOYMENT` değerlerini önceden tanımladıysa görünür. Anahtar doğrulanmadan kaydedilmez; işletim sisteminin güvenli kasasında tutulur. Model sohbet çubuğundan seçilir; erişilebiliyorsa önerilen Luna varsayılandır.
+
+Sohbet ve ses hesapları ayrıdır. ChatGPT girişi ses transkripsiyonunu kapsamaz; ses hesabı kullanıcı tarafından ayrıca seçilir. Limit dolduğunda farklı ücretli hesaba otomatik geçilmez. Araştırma kaynakları, güvenlik kararları ve kalan kurumsal parçalar: [AI hesapları](ai-accounts.md).
 
 ## Nasıl çalışır
 
@@ -22,13 +30,15 @@ Tek bir kutu: sorunu yaz (ya da mikrofona bas ve konuş), cevabı tablo olarak a
 
 ### Sesli sorgu
 
-Mikrofon düğmesine bas, konuş, tekrar bas: kayıt metne çevrilir ve gönderilir. Ses yalnızca mikrofona bastığında sağlayıcıya gider. OpenRouter'da ses girdili bir model (varsayılan `google/gemini-3.5-flash-lite`), OpenAI'da `gpt-4o-mini-transcribe` kullanılır; modeli Ayarlar'dan değiştirebilirsin.
+Mikrofon düğmesine basıp konuş: sözlerin soru çubuğunda silik taslak olarak görünür; durdurduğunda düzenlenebilir metin olur. Göndermeden sorgulanmaz. Ses yalnızca mikrofonu başlattığında seçtiğin ses sağlayıcısına gider. OpenRouter'da ses girdili model, OpenAI API'de `gpt-4o-mini-transcribe` kullanılır.
 
 ## Veritabanı bağlantısı
 
 Desteklenenler: **SQL Server, PostgreSQL, MySQL / MariaDB, SQLite**. Yeni tür, `backend/db/dialects.py` içine bir kayıt eklenerek gelir.
 
-Arayüzde bağlantı dört adımdır: **Tür** (yerelde bulunan sunucular ayrıca önerilir), **Bilgiler**, **Test**, **Bağlan**.
+İlk açılışta giriş seçenekleri gösterilir; login kendiliğinden başlamaz; doğrulanan bir hesapla devam edilir. Sonra **İzin ver ve bul**, bu bilgisayardaki yalnızca DB adlarını listeler. Tablo/kolon/içerik okunmaz ve izin verilmeden ilerlenmez. Kullanıcı DB'leri seçip **Seçilenlere erişim ver** dediğinde mevcut bilgiler otomatik doldurulur ve sohbet ekranına geçilir. İçerik yalnızca soru gönderildiğinde sorgulanır; otomatik veri profillemesi yapılmaz. Mevcut erişim bilgisi bulunmayan kaynaklar otomatik bağlanmış gibi gösterilmez.
+
+Sonraki kullanımlarda kaynak paneli veya isteğe bağlı gelişmiş bağlantı alanları kullanılabilir.
 - Bir bağlantı URL'si, ODBC/ADO/JDBC dizesi ya da dosya yolu yapıştırırsanız tür, sunucu, port, veritabanı ve kullanıcı otomatik dolar. Port, sunucu ve sürücü varsayılanları türe göre tahmin edilir.
 - "Veritabanlarını getir" adı henüz bilinmeyen veya yanlış yazılmış veritabanından bağımsız olarak sunucudaki adları listeler.
 - **Test** adım adım ilerler (sürücü, ağ, giriş, tablo erişimi, yetki); başarısız adım ne yapılacağını söyler.
@@ -68,6 +78,8 @@ Claude Desktop için `claude_desktop_config.json`:
 {"mcpServers": {"niq": {"command": "C:\\yol\\NIQ\\venv\\Scripts\\python.exe", "args": ["C:\\yol\\NIQ\\niq_mcp.py"]}}}
 ```
 Claude Code için: `claude mcp add niq -- C:\yol\NIQ\venv\Scripts\python.exe C:\yol\NIQ\niq_mcp.py`
+
+Ayarlar'daki **MCP ile kullan** bölümünden kendi kurulumuna uygun yapılandırmayı kopyalayabilirsin. Paketli dağıtımda ayrı `NIQ-MCP.exe` stdio sunucusu kullanılır; installer bunu masaüstü exe'siyle birlikte kurar. İstemci kendi modeliyle şemayı okuyup `run_sql` çağırabilir; bu kullanım NIQ AI anahtarı gerektirmez. `ask`, NIQ'de seçilmiş hesabı kullanır.
 
 ## Güvenlik
 

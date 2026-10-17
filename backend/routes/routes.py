@@ -118,7 +118,7 @@ class AppState:
         session["PROFILE"] = asdict(profile)
         session.permanent = True
         Settings.save({"last_connection_id": profile.id if self.profiles.get(profile.id) else ""})
-        self._profile_in_background(profile)
+        # Profiling reads row samples and counts; only the explicit profile action may do it.
 
     def manager(self) -> Connector:
         if not self.connector:
@@ -905,7 +905,7 @@ def update_settings():
         Settings.set_api_key(key_provider, str(data["api_key"]).strip())
 
     Settings.save(updates)
-    state.ai_service.reconfigure()
+    state.ai_service = AIService()
     return jsonify(ok(_settings_payload(), "Ayarlar kaydedildi."))
 
 

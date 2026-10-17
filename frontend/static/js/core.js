@@ -10,31 +10,6 @@
     const $ = (id) => document.getElementById(id);
     NIQ.$ = $;
 
-    // Atmosfer içeriği engellemeden işaretçinin yönünde yavaşça kayar.
-    const atmosphere = document.querySelector('.ambient');
-    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
-    let atmosphereFrame = 0;
-    let pointerX = 0.5;
-    let pointerY = 0.5;
-    function paintAtmosphere() {
-        atmosphereFrame = 0;
-        if (!atmosphere || reducedMotion.matches) return;
-        atmosphere.style.setProperty('--ambient-x', (pointerX - 0.5) * 55 + 'px');
-        atmosphere.style.setProperty('--ambient-y', (pointerY - 0.5) * 40 + 'px');
-        atmosphere.style.setProperty('--pointer-x', pointerX * 100 + '%');
-        atmosphere.style.setProperty('--pointer-y', pointerY * 100 + '%');
-    }
-    window.addEventListener('pointermove', (event) => {
-        if (reducedMotion.matches || event.pointerType === 'touch') return;
-        pointerX = event.clientX / innerWidth;
-        pointerY = event.clientY / innerHeight;
-        if (!atmosphereFrame) atmosphereFrame = requestAnimationFrame(paintAtmosphere);
-    }, { passive: true });
-    window.addEventListener('blur', () => { pointerX = pointerY = 0.5; paintAtmosphere(); });
-    reducedMotion.addEventListener('change', () => {
-        if (reducedMotion.matches && atmosphere) atmosphere.removeAttribute('style');
-    });
-
     NIQ.newId = () => 'c' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
     NIQ.state.conversationId = NIQ.newId();
 
@@ -138,7 +113,7 @@
 
     // ---- yönlendirme ----
     NIQ.go = function (name) {
-        const view = name || 'chat';
+        const view = NIQ.state.onboarding ? 'onboarding' : name || 'chat';
         if (view !== 'chat' && NIQ.chat) NIQ.chat.cancelRecording();
         document.querySelectorAll('.view').forEach((el) => el.classList.toggle('active', el.id === 'view-' + view));
         document.querySelectorAll('#links button').forEach((b) => b.classList.toggle('active', b.dataset.view === view));
@@ -167,6 +142,8 @@
             NIQ.state.aiReady = data.ai_service_available;
             NIQ.state.provider = data.provider || '';
             NIQ.state.model = data.model || '';
+            if (NIQ.models) NIQ.models.label(data.model);
+            if ($('ai-plan')) $('ai-plan').hidden = data.provider !== 'chatgpt';
             return data;
         } catch (e) {
             return null;

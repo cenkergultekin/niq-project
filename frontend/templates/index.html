@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="/static/css/niq.css?v=6.2">
     <script src="/static/vendor/chart.umd.min.js"></script>
 </head>
-<body>
+<body class="booting">
     <div class="ambient" aria-hidden="true"><i></i><i></i><i></i></div>
     <header class="top">
         <button class="pill" id="conn-pill" title="Veri kaynaklarını yönet"><span id="conn-label">Veri kaynağı seç</span></button>
@@ -23,6 +23,23 @@
     </header>
 
     <main>
+        <section class="view" id="view-onboarding">
+            <div id="onboarding-account">
+                <canvas id="onboarding-wordmark" width="480" height="160" role="img" aria-label="NIQ"></canvas>
+                <h1>Nasıl devam etmek istersin?</h1>
+                <div id="onboarding-ai"></div>
+            </div>
+            <div id="onboarding-databases" hidden>
+                <h1>Veritabanı erişimi</h1>
+                <div id="onboarding-permission">
+                    <p>Bu bilgisayardaki veritabanlarının yalnızca adlarını bulmamıza izin ver.</p>
+                    <p class="note">Tablo, kolon ve içerik okunmaz. Mevcut bağlantı bilgileri otomatik kullanılır; hiçbir bilgi kopyalaman gerekmez.</p>
+                    <button class="btn primary" id="onboarding-discover">İzin ver ve bul</button>
+                </div>
+                <div id="onboarding-results"></div>
+            </div>
+            <p class="status" id="onboarding-status" role="status"></p>
+        </section>
         <!-- Sohbet -->
         <section class="view active" id="view-chat">
             <div id="connect" hidden>
@@ -49,7 +66,7 @@
                     <div class="field"><input id="db-catalog-search" type="search" aria-label="Veritabanı ara" placeholder="Veritabanı ara"></div>
                     <div id="db-catalog-list"></div>
                     <div class="row"><button class="btn primary" id="db-scope-connect-btn">Seçilenlere bağlan</button><span class="note" id="db-scope-count"></span></div>
-                    <p class="note">Sohbet ilgili veritabanlarını ve tabloları kendisi seçer. Sorgular salt-okunur çalışır.</p>
+                    <p class="note">İçerik yalnızca soru gönderdiğinde sorgulanır. Erişim verdiğin veritabanları kullanılır.</p>
                     <details id="db-unavailable" hidden><summary>Erişilemeyen kaynaklar</summary><ul id="db-unavailable-list"></ul></details>
                 </div>
                 <p class="note" id="db-discovery-status" role="status"></p>
@@ -213,6 +230,44 @@
         <section class="view" id="view-settings">
             <h1>Ayarlar</h1>
             <h2>AI</h2>
+            <div id="ai-accounts">
+                <div class="row access-paths">
+                    <button class="btn access-option plan-choice" id="ai-upgrade" aria-haspopup="dialog">
+                        <img class="access-logo" src="/static/images/niq.png" alt="" width="44" height="44">
+                        <span class="access-title">NIQ Premium</span>
+                    </button>
+                    <button class="btn access-option chatgpt-signin" id="ai-chatgpt">
+                        <img class="access-logo" src="/static/images/chatgpt-logo-white.svg" alt="" width="28" height="28">
+                        <span class="access-title">ChatGPT ile devam et</span>
+                    </button>
+                    <button class="btn access-option api-choice" id="ai-api-toggle" aria-expanded="false" aria-controls="ai-key-form">
+                        <svg class="access-logo" viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="4"/><path d="m11 11 9 9m-3-3 3-3m-6 0 3-3"/></svg>
+                        <span class="access-title">API anahtarı ekle</span>
+                    </button>
+                    <button class="link-btn" id="ai-cancel" hidden>Vazgeç</button>
+                </div>
+                <p class="note" id="ai-login-status" role="status"></p>
+                <div class="grid2">
+                    <div class="field"><label for="ai-account">Sohbet hesabı</label><select id="ai-account"></select></div>
+                    <div class="field" hidden><label for="ai-model">Model</label><input id="ai-model" list="ai-models" autocomplete="off"><datalist id="ai-models"></datalist></div>
+                    <div class="field"><label for="ai-label">İsim</label><input id="ai-label" autocomplete="off"></div>
+                    <div class="field"><label for="ai-voice">Ses hesabı</label><select id="ai-voice"></select></div>
+                </div>
+                <div class="row">
+                    <button class="btn primary" id="ai-use">Hesabı kullan</button>
+                    <button class="link-btn" id="ai-model-refresh">Modelleri getir</button>
+                    <button class="link-btn" id="ai-reauth">Yeniden giriş</button>
+                    <button class="link-btn" id="ai-disconnect">Çıkış yap</button>
+                </div>
+                <div id="ai-key-form" class="api-key-form" hidden>
+                    <div class="field"><div id="ai-providers" class="provider-choices" role="group" aria-label="AI sağlayıcısı"></div><input type="hidden" id="ai-new-provider"></div>
+                    <div class="field"><label for="ai-new-label">İsim</label><input id="ai-new-label" placeholder="İş hesabım" autocomplete="off"></div>
+                    <div class="field"><label for="ai-new-key">API anahtarı</label><input type="password" id="ai-new-key" autocomplete="off" placeholder="API anahtarını gir"></div>
+                    <button class="btn primary" id="ai-add">Bağlan</button>
+                </div>
+                <p class="status" id="ai-account-status" role="status"></p>
+            </div>
+            <details><summary>Mevcut sağlayıcı ayarı</summary>
             <div class="grid2">
                 <div class="field"><label for="s-provider">Sağlayıcı</label><select id="s-provider"></select></div>
                 <div class="field"><label for="s-model">Model</label><select id="s-model"></select><p class="note" id="s-price"></p></div>
@@ -226,6 +281,13 @@
                 <button class="btn danger" id="s-clear-key">Anahtarı sil</button>
             </div>
             <div class="status" id="s-status"></div>
+            </details>
+
+            <details><summary>MCP ile kullan</summary>
+                <p class="note">MCP istemcinin kendi modelini veya NIQ'de seçtiğin hesabı kullanır. Veritabanı parolaları ve AI anahtarları istemciye aktarılmaz.</p>
+                <button class="btn" id="ai-mcp-copy">MCP yapılandırmasını kopyala</button>
+                <pre id="ai-mcp-config" hidden></pre>
+            </details>
 
             <details>
                 <summary>Gelişmiş</summary>
@@ -254,9 +316,11 @@
     <footer class="dock" id="dock">
         <div class="dock-inner">
             <div class="cmd-list" id="cmd-list" hidden></div>
+            <div id="ai-plan" class="note" hidden>ChatGPT planı kullanılıyor · <a href="https://chatgpt.com/settings/usage" rel="noreferrer">Kullanımı yönet</a></div>
             <div class="bar">
                 <textarea id="q" rows="1" placeholder="Verilerine sor…" aria-label="Sorun" autocomplete="off"></textarea>
                 <div class="composer-tools">
+                <button class="composer-model" id="chat-model-button" aria-haspopup="listbox" aria-expanded="false" title="Model seç"><span id="chat-model-label">GPT-6 Luna</span></button>
                 <button class="icon-btn" id="mic" title="Konuşarak sor" aria-label="Konuşarak sor">
                     <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
                 </button>
@@ -265,6 +329,7 @@
                 </button>
                 </div>
             </div>
+            <div id="chat-model-menu" class="model-menu" hidden><input type="search" id="chat-model-search" placeholder="Model ara" aria-label="Model ara"><div id="chat-model-options" role="listbox" aria-label="Modeller"></div></div>
         </div>
     </footer>
 
@@ -273,12 +338,30 @@
         <p id="confirm-text"></p>
         <div class="row"><button class="btn" id="confirm-no">Vazgeç</button><button class="btn primary" id="confirm-yes">Onayla</button></div>
     </dialog>
+    <dialog class="confirm" id="ai-welcome">
+        <h3>ChatGPT planını kullanıyorsun</h3>
+        <p>Uygun sohbet istekleri ChatGPT planından karşılanır. Ses tanıma, ayrıca seçtiğin API hesabından ücretlendirilir.</p>
+        <div class="row"><a href="https://chatgpt.com/settings/usage" rel="noreferrer">Kullanımı yönet</a><button class="btn primary" id="ai-welcome-dismiss">Tamam</button></div>
+    </dialog>
     <div id="toast" hidden></div>
+    <dialog class="confirm" id="niq-plan" aria-labelledby="niq-plan-title">
+        <img src="/static/images/niq.png" alt="NIQ" width="64" height="64">
+        <h3 id="niq-plan-title">NIQ Premium</h3>
+        <p class="plan-intro">Tek abonelikle tüm özellikler.<br>Model bağlantısını biz hallederiz.</p>
+        <div class="plan-features"><span>Verilerinle sohbet</span><span>Sesli kullanım</span><span>Analiz ve raporlar</span></div>
+        <button class="btn primary plan-activate" disabled>Planı etkinleştir</button>
+        <p class="note plan-availability">Abonelik henüz kullanıma açılmadı.</p>
+        <button class="link-btn" id="niq-plan-close">Geri dön</button>
+    </dialog>
 
     <script src="/static/js/core.js"></script>
+    <script src="/static/js/atmosphere.js"></script>
     <script src="/static/js/voice.js"></script>
     <script src="/static/js/connect.js"></script>
     <script src="/static/js/chat.js"></script>
+    <script src="/static/js/accounts.js"></script>
+    <script src="/static/js/onboarding.js"></script>
+    <script src="/static/js/models.js"></script>
     <script src="/static/js/views.js"></script>
 </body>
 </html>

@@ -107,6 +107,12 @@ class LocalOnlyPage(QWebEnginePage):
 
 
 class DesktopBridge(QObject):
+    @Slot(result=bool)
+    def copyMcpConfiguration(self):
+        from backend.routes.ai_accounts import mcp_configuration
+        QApplication.clipboard().setText(mcp_configuration())
+        return True
+
     @Slot(result=str)
     def chooseSqliteFile(self):
         path, _ = QFileDialog.getOpenFileName(self.parent(), "SQLite veritabanını seç", "",
@@ -117,6 +123,11 @@ class DesktopBridge(QObject):
 class NIQDesktopApp(QMainWindow):
     def __init__(self):
         super().__init__()
+        from backend.services import desktop_actions
+        desktop_actions.available = True
+        self.focus_timer = QTimer(self)
+        self.focus_timer.timeout.connect(self._focus_from_browser)
+        self.focus_timer.start(250)
         self.port = free_port()
         self.origin = f"http://127.0.0.1:{self.port}"
         self.server = create_server(flask_app, host="127.0.0.1", port=self.port, threads=8)
@@ -132,6 +143,7 @@ class NIQDesktopApp(QMainWindow):
 
         self.web_view = QWebEngineView()
         self.web_view.setPage(LocalOnlyPage(self.web_view, self.origin))
+        self.web_view.page().setBackgroundColor(QColor("#081324"))
         self.web_channel = QWebChannel(self.web_view.page())
         self.desktop_bridge = DesktopBridge(self)
         self.web_channel.registerObject("desktop", self.desktop_bridge)
@@ -181,7 +193,6 @@ class NIQDesktopApp(QMainWindow):
             controls.addWidget(result)
             return result
 
-        self.reload_button = button("reload", "Yenile (F5)", self.web_view.reload)
         button("minimize", "Simge durumuna küçült", self.showMinimized)
         self.maximize_button = button("maximize", "Büyüt", self.toggle_maximized)
         button("close", "Kapat (Ctrl+Q)", self.close)
@@ -203,21 +214,12 @@ class NIQDesktopApp(QMainWindow):
         self.menuBar().hide()
         self.statusBar().setSizeGripEnabled(False)
         self.statusBar().addPermanentWidget(QSizeGrip(self))
-        self.web_view.loadStarted.connect(lambda: self._loading(True))
-        self.web_view.loadFinished.connect(lambda ok: self._loading(False))
         self.statusBar().showMessage("NIQ başlatılıyor...")
 
         self._attempts = 0
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._load_when_ready)
         self.timer.start(300)
-
-    def _loading(self, loading):
-        self.reload_button.setIcon(control_icon("stop" if loading else "reload"))
-        self.reload_button.setToolTip("Yüklemeyi durdur" if loading else "Yenile (F5)")
-        self.reload_button.setAccessibleName(self.reload_button.toolTip())
-        self.reload_button.clicked.disconnect()
-        self.reload_button.clicked.connect(self.web_view.stop if loading else self.web_view.reload)
 
     def toggle_maximized(self):
         self.showNormal() if self.isMaximized() else self.showMaximized()
@@ -260,8 +262,6 @@ class NIQDesktopApp(QMainWindow):
             return act
 
         file_menu = self.menuBar().addMenu("Dosya")
-        file_menu.addAction(action("Yenile", "F5", self.web_view.reload))
-        file_menu.addSeparator()
         file_menu.addAction(action("Çıkış", "Ctrl+Q", self.close))
         view_menu = self.menuBar().addMenu("Görünüm")
         view_menu.addAction(action("Tam Ekran", "F11", self._toggle_fullscreen))
@@ -324,14 +324,29 @@ class NIQDesktopApp(QMainWindow):
     def shutdown(self) -> None:
         """İstek işçileri bitmeden soketleri kapatmak Windows'ta WinError 10038 üretir."""
         self.timer.stop()
+        self.focus_timer.stop()
+        from backend.services import desktop_actions
+        desktop_actions.available = False
+        desktop_actions.focus_requested.clear()
         self.web_view.stop()
         self.server.task_dispatcher.shutdown(timeout=5)
         self.server.close()
         self.server_thread.join(timeout=2)
 
+    def _focus_from_browser(self):
+        from backend.services import desktop_actions
+        if desktop_actions.focus_requested.is_set():
+            desktop_actions.focus_requested.clear()
+            if self.isMinimized():
+                self.showNormal()
+            self.raise_()
+            self.activateWindow()
+
 
 def main() -> None:
-    qt_app = QApplication([arg for arg in sys.argv if arg != "--demo"])
+    from backend.config.config import Settings
+    flask_app.config["ONBOARDING_REQUIRED"] = "--onboarding" in sys.argv or not Settings.load()["onboarding_complete"]
+    qt_app = QApplication([arg for arg in sys.argv if arg not in ("--demo", "--onboarding")])
     if "--demo" in sys.argv:
         from backend.db.demo import demo_database
         from backend.db.profiles import Profile
@@ -345,7 +360,8 @@ def main() -> None:
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("NIQ.Desktop.3")
     qt_app.setApplicationVersion(APP_VERSION)
     qt_app.setStyle("Fusion")
-    start_background_services()
+    if not flask_app.config["ONBOARDING_REQUIRED"]:
+        start_background_services()
     window = NIQDesktopApp()
     window.show()
     sys.exit(qt_app.exec())

@@ -14,7 +14,7 @@ from backend.config.config import Settings
 from backend.core.sql_guard import validate_sql
 from backend.db.connector import Connector
 from backend.models.models import SavedQuery
-from backend.services.ai_service import AIService, AIServiceError, format_schema
+from backend.services.ai_service import AIService, AIServiceError, format_schema, query_budget
 from backend.services.history import HistoryStore
 from backend.services.knowledge import KnowledgeStore
 from backend.services.query_service import Conversation, resolve_tables
@@ -101,6 +101,7 @@ def _run_step(connector: Connector, sql: str, known: List[str], row_limit: int) 
             "row_count": len(rows), "truncated": response.truncated}
 
 
+@query_budget
 def run_analysis(connector: Connector, ai: AIService, history: HistoryStore, knowledge: KnowledgeStore,
                  question: str, conversation: Optional[Conversation] = None, max_steps: int = MAX_STEPS) -> Dict[str, Any]:
     """Soruyu birkaç sorguyla analiz eder. Dönüş: UI ve API için yanıt gövdesi."""
@@ -129,8 +130,13 @@ def run_analysis(connector: Connector, ai: AIService, history: HistoryStore, kno
         message = ai.chat(messages, TOOLS)
         calls = list(message.tool_calls or [])
         assistant: Dict[str, Any] = {"role": "assistant", "content": message.content or ""}
+        if getattr(message, "response_items", None) is not None:
+            assistant["_response_items"] = message.response_items
+        if getattr(message, "anthropic_blocks", None) is not None:
+            assistant["_anthropic_blocks"] = message.anthropic_blocks
         if calls:
             assistant["tool_calls"] = [
+                c.model_dump(exclude_none=True) if hasattr(c, "model_dump") else
                 {"id": c.id, "type": "function", "function": {"name": c.function.name, "arguments": c.function.arguments}}
                 for c in calls]
         messages.append(assistant)

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="tr">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="referrer" content="no-referrer">
+    <title>{{ 'Giriş başarılı' if success else 'Giriş tamamlanamadı' }} · NIQ</title>
+    <link rel="icon" href="/static/images/niq.png">
+    <link rel="stylesheet" href="/static/css/fonts.css">
+    <link rel="stylesheet" href="/static/css/auth.css">
+</head>
+<body class="{{ 'success' if success else 'failure' }}">
+    <div class="auth-atmosphere" aria-hidden="true"></div>
+    <main>
+        <div class="auth-partners" aria-label="NIQ ve {{ 'OpenRouter' if provider == 'openrouter' else 'ChatGPT' }}">
+            <img class="niq-mark" src="/static/images/niq.png" alt="NIQ">
+            <span aria-hidden="true">+</span>
+            <img class="partner-mark" src="/static/images/{{ 'openrouter.png' if provider == 'openrouter' else 'chatgpt-logo-white.svg' }}" alt="{{ 'OpenRouter' if provider == 'openrouter' else 'ChatGPT' }}">
+        </div>
+        <h1>{{ 'Giriş başarılı' if success else 'Giriş tamamlanamadı' }}</h1>
+        <p>{{ message }}</p>
+        <button id="auth-return">NIQ'ye dön</button>
+        <span class="auth-footnote" id="auth-return-status">Bu sekmeyi kapatabilirsin.</span>
+    </main>
+    <script src="/static/js/auth-result.js"></script>
+</body>
+</html>

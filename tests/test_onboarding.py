@@ -57,6 +57,51 @@ def test_catalog_needs_permission_before_any_credentials_are_read(scope_api, mon
     assert client.post("/api/db/scope", json={"databases": [item["id"] for item in result["databases"]]}).status_code == 200
 
 
+def test_catalog_only_reads_names_never_tables_or_rows(scope_api, monkeypatch):
+    from backend.db.connector import Connector
+    client, profiles = scope_api
+    for profile in profiles:
+        routes.state.profiles.save(profile)
+    monkeypatch.setattr("backend.db.catalog.diagnostics.discover", lambda *args: {"local_servers": []})
+    monkeypatch.setattr(Connector, "get_tables", lambda *a, **kw: pytest.fail("must not inspect tables during name discovery"))
+    monkeypatch.setattr(Connector, "get_database_schema", lambda *a, **kw: pytest.fail("must not inspect columns during name discovery"))
+    response = client.post("/api/db/catalog", json={"approved": True})
+    assert response.status_code == 200 and response.json["data"]["database_count"] == 2
+    assert all("tables" not in item and "table_count" not in item for item in response.json["data"]["databases"])
+
+
+def test_first_run_gates_content_and_requires_separate_user_access(scope_api, monkeypatch):
+    from app import app
+    from backend.config.config import Settings
+    client, profiles = scope_api
+    for profile in profiles:
+        routes.state.profiles.save(profile)
+    monkeypatch.setitem(app.config, "ONBOARDING_REQUIRED", True)
+    monkeypatch.setattr("backend.db.catalog.diagnostics.discover", lambda *args: {"local_servers": []})
+    assert client.get("/api/onboarding").json["data"]["required"]
+    assert client.post("/api/query", json={"question": "SELECT"}).status_code == 423
+    assert client.get("/api/db/discover").status_code == 423
+    assert client.get("/api/connections").status_code == 423
+    assert client.post("/api/onboarding/discover", json={"approved": True}).status_code == 400
+    Settings.save({"ai_account_id": "synthetic-account"})
+    with client.session_transaction() as setup_session:
+        setup_session["AI_VERIFIED"] = "synthetic-account"
+    assert client.post("/api/onboarding/connect", json={"databases": [], "approved": True}).status_code == 400
+    assert client.post("/api/onboarding/discover", json={}).status_code == 409
+    result = client.post("/api/onboarding/discover", json={"approved": True}).json["data"]
+    assert routes.state.connector is None
+    assert client.post("/api/query", json={"question": "still blocked"}).status_code == 423
+    tokens = [item["id"] for item in result["databases"]]
+    assert client.post("/api/onboarding/connect", json={"databases": tokens}).status_code == 409
+    assert client.post("/api/onboarding/connect", json={"databases": ["forged"], "approved": True}).status_code == 400
+    reads = []
+    monkeypatch.setattr(routes.state, "_profile_in_background", lambda *a: reads.append("background-content"))
+    response = client.post("/api/onboarding/connect", json={"databases": tokens[:1], "approved": True})
+    assert response.status_code == 200 and response.json["data"]["scope_count"] == 1
+    assert not reads and Settings.load()["onboarding_complete"]
+    assert not client.get("/api/onboarding").json["data"]["required"]
+
+
 def test_scope_routes_questions_without_asking_for_tables_and_history_stays_accessible(scope_api):
     client, profiles = scope_api
     tokens = [routes.state.connection_grants.issue(p, "", database_locked=True) for p in profiles]

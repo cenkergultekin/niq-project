@@ -310,7 +310,7 @@ def cmd_jobs(args, store):
 
 
 def cmd_ai(args, store):
-    config = Settings.ai_config()
+    config = AIService().config
     status = {"provider": config["provider"], "model": config["model"], "has_key": bool(config["api_key"]),
               "providers": {k: {"label": v["label"], "has_key": Settings.has_api_key(k)} for k, v in PROVIDERS.items()}}
     if args.action == "test":

@@ -36,6 +36,8 @@ def main():
         state.connect(Profile(type="sqlite", name="Örnek satışlar", database=str(path)), None)
     qt = QApplication(sys.argv[:1])
     window = main_desktop.NIQDesktopApp()
+    loads = []
+    window.web_view.loadStarted.connect(lambda: loads.append(time.monotonic()))
     window.show()
     QFileDialog.getOpenFileName = staticmethod(lambda *args: (str(path), ""))
     started = time.monotonic()
@@ -89,9 +91,11 @@ def main():
             elif stage == 7:
                 assert window.isMinimized(), "Minimize failed"
                 window.showNormal()
-                window.reload_button.click()
+                assert window.title_bar.findChild(QPushButton, "reload") is None
             elif stage == 8:
-                passed.append("minimize-maximize-restore-reload")
+                assert len(loads) == 1, "Focus/restore unexpectedly reloaded the page"
+                assert window.web_view.page().backgroundColor().name() == "#081324"
+                passed.append("minimize-maximize-restore-no-reload-control")
                 QMessageBox.question = staticmethod(lambda *args: QMessageBox.StandardButton.No)
                 window.title_bar.findChild(QPushButton, "close").click()
                 assert window.isVisible(), "Cancelled close hid window"
