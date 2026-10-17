@@ -5,8 +5,10 @@ Bağlantı teşhisi ve keşif.
 başarısızlık için ne yapılacağını söyler. Hem arayüz hem agent (CLI) aynı çıktıyı kullanır.
 `discover` kullanıcının yazmasına gerek kalmadan makinedeki olası sunucuları bulur.
 """
+import json
 import re
 import socket
+import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, List, Optional
 
@@ -14,7 +16,7 @@ from sqlalchemy import text
 
 from backend.db.connector import Connector, friendly_error
 from backend.db.dialects import DIALECTS, driver_available
-from backend.db.profiles import Profile
+from backend.db.profiles import Profile, ProfileStore
 from backend.db.tunnel import HostKeyChanged, HostKeyUnknown, SSHTunnelError
 
 OK, FAIL, WARN, SKIP = "ok", "fail", "warn", "skip"
@@ -25,7 +27,7 @@ ERROR_HINTS = [
     (r"cannot open database|does not exist|unknown database|database .* not found",
      "Veritabanı adı bulunamadı. 'Veritabanlarını getir' ile sunucudaki adları listeleyip seçin."),
     (r"certificate|ssl|tls",
-     "Sertifika sorunu. Ayarlar > Gelişmiş > 'Sunucu sertifikasına güven' seçeneğini açın."),
+     "Bağlantı > Gelişmiş bölümündeki TLS ayarlarını kontrol edin; sunucu SSL desteklemeli ve doğrulama için doğru CA sertifikası kullanılmalı."),
     (r"timed out|timeout|refused|could not connect|can't connect|unreachable|no route|network-related|actively refused",
      "Sunucuya ulaşılamadı. Adres ve portu, sunucunun çalıştığını ve güvenlik duvarının portu açtığını kontrol edin."),
     (r"data source name not found|no driver|can't open lib|driver",
@@ -59,6 +61,9 @@ def _check_driver(profile: Profile) -> Dict[str, str]:
         if not installed:
             return _step("driver", "Sürücü", FAIL, "SQL Server ODBC sürücüsü bulunamadı", dialect.install_hint)
         if driver == "SQL Server":
+            if profile.options.get("ssl") in ("require", "verify"):
+                return _step("driver", "Sürücü", FAIL, "Eski SQL Server sürücüsü seçilen TLS ayarlarını desteklemiyor",
+                             "Şifreli bağlantı için Microsoft ODBC Driver 18 kurun: https://aka.ms/odbc18")
             return _step("driver", "Sürücü", WARN, "Windows ile gelen eski 'SQL Server' sürücüsü kullanılıyor",
                          "Çalışır, ancak yeni TLS ve sunucu özellikleri için Microsoft ODBC Driver 18 kurmanız önerilir: https://aka.ms/odbc18")
         return _step("driver", "Sürücü", OK, driver)
@@ -188,8 +193,47 @@ def _port_open(port: int) -> bool:
         return False
 
 
-def discover() -> Dict[str, Any]:
-    """Makinedeki sürücüleri ve varsayılan portlarda dinleyen yerel sunucuları bulur."""
+def _docker_servers() -> List[Dict[str, Any]]:
+    """Yalnızca yayımlanan port metadata'sı; env, parola veya kapsayıcı dosyaları okunmaz."""
+    try:
+        result = subprocess.run(["docker", "ps", "--format", '{{json .}}'], capture_output=True, text=True,
+                                timeout=3, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        if result.returncode:
+            return []
+        servers = []
+        for line in result.stdout.splitlines():
+            item = json.loads(line)
+            image = item.get("Image", "").lower()
+            kind = "postgresql" if "postgres" in image else "mysql" if any(x in image for x in ("mysql", "mariadb")) else "mssql" if "mssql" in image else None
+            if not kind:
+                continue
+            for match in re.finditer(r"(?:127\.0\.0\.1|0\.0\.0\.0|\[::\]):(\d+)->\d+/tcp", item.get("Ports", "")):
+                servers.append({"type": kind, "host": "127.0.0.1", "port": int(match[1]),
+                                "name": item.get("Names", DIALECTS[kind].label), "source": "docker",
+                                "container_id": item["ID"], "source_id": f"docker:{item['ID']}:{match[1]}"})
+        return servers
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        return []
+
+
+def _sql_instances() -> List[Dict[str, Any]]:
+    """Windows'ta kurulu SQL Server örnek adları; hesap/sır okunmaz."""
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Microsoft SQL Server\Instance Names\SQL") as key:
+            names = []
+            for index in range(winreg.QueryInfoKey(key)[1]):
+                instance = winreg.EnumValue(key, index)[0]
+                host = "localhost" if instance == "MSSQLSERVER" else "localhost\\" + instance
+                names.append({"type": "mssql", "host": host, "port": 1433, "name": instance, "source": "windows",
+                              "options": {"auth": "windows"}})
+            return names
+    except (ImportError, OSError):
+        return []
+
+
+def discover(profiles: Optional[ProfileStore] = None) -> Dict[str, Any]:
+    """Sürücüler, varsayılan portlar, Docker portları ve kurulu SQL Server örnekleri."""
     drivers = {d_id: driver_available(d) for d_id, d in DIALECTS.items()}
     odbc: List[str] = []
     try:
@@ -197,9 +241,21 @@ def discover() -> Dict[str, Any]:
         odbc = [d for d in pyodbc.drivers() if "SQL Server" in d]
     except Exception:
         pass
-    candidates = [(d_id, d.default_port) for d_id, d in DIALECTS.items() if d.default_port]
+    candidates = [{"type": d_id, "host": "localhost", "port": d.default_port, "source": "port", "name": d.label}
+                  for d_id, d in DIALECTS.items() if d.default_port]
+    candidates += _docker_servers()
+    store = profiles or ProfileStore()
+    for profile in store.list():
+        if profile.host in ("localhost", "127.0.0.1", "::1") and profile.port:
+            candidates.append({"type": profile.type, "host": "localhost", "port": profile.port,
+                               "name": profile.name, "source": "saved"})
+    # Daha açıklayıcı kaynağı tut; aynı sunucu birden fazla kez görünmesin.
+    candidates = list({(c["type"], c["port"]): c for c in candidates}.values())
     with ThreadPoolExecutor(max_workers=len(candidates) or 1) as pool:
-        open_flags = list(pool.map(lambda c: _port_open(c[1]), candidates))
-    local = [{"type": t, "host": "localhost", "port": p, "label": DIALECTS[t].label}
-             for (t, p), is_open in zip(candidates, open_flags, strict=False) if is_open]
+        open_flags = list(pool.map(lambda c: _port_open(c["port"]), candidates))
+    local = [{**candidate, "label": DIALECTS[candidate["type"]].label, "requires_login": True}
+             for candidate, is_open in zip(candidates, open_flags, strict=False) if is_open]
+    for instance in _sql_instances():
+        if not any(item["type"] == "mssql" and item["host"] == instance["host"] for item in local):
+            local.append({**instance, "label": DIALECTS["mssql"].label, "requires_login": True})
     return {"drivers": drivers, "odbc_drivers": odbc, "local_servers": local}

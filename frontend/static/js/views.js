@@ -28,17 +28,22 @@
             const queries = (await api('/queries?limit=100')).data;
             if (!queries.length) { list.appendChild(el('p', { class: 'muted', text: 'Henüz soru sormadın.' })); return; }
             queries.forEach((q) => {
-                const meta = [NIQ.timeAgo(q.created_at), (q.tables_used || []).join(', ')].filter(Boolean).join(' · ');
+                const meta = [NIQ.timeAgo(q.created_at), q.source, (q.tables_used || []).join(', ')].filter(Boolean).join(' · ');
                 list.appendChild(el('div', { class: 'item' },
                     el('div', { class: 'item-main' },
-                        el('div', { class: 'item-title', text: q.question }),
+                        el('button', { class: 'item-title history-question', text: q.question, title: 'Kayıtlı sonucu göster',
+                            onclick: () => { NIQ.go('chat'); NIQ.chat.showStored(q); } }),
                         el('div', { class: 'item-meta' }, meta + ' ',
                             q.verified ? el('span', { class: 'badge ok', text: 'doğrulandı' }) : null,
                             !q.is_successful ? el('span', { class: 'badge error', text: 'hata' }) : null)),
                     el('div', { class: 'item-actions' },
-                        el('button', { class: 'link-btn', text: 'Aç', onclick: () => { NIQ.go('chat'); NIQ.chat.showStored(q); } }),
-                        el('button', { class: 'link-btn', text: 'Tekrar sor', onclick: () => { NIQ.go('chat'); NIQ.chat.ask(q.question); } }),
+                        el('button', { class: 'link-btn', text: 'Soruyu düzenle', onclick: () => NIQ.chat.editQuestion(q.question) }),
+                        el('button', { class: 'link-btn', text: 'Yeniden çalıştır', onclick: async (event) => {
+                            event.currentTarget.disabled = true;
+                            NIQ.go('chat'); await NIQ.chat.ask(q.question);
+                        } }),
                         el('button', { class: 'link-btn', text: 'Sil', onclick: guarded(async () => {
+                            if (!(await NIQ.confirm('Bu soruyu ve kayıtlı sonucunu geçmişten sil?'))) return;
                             await api('/queries/' + q.id, { method: 'DELETE', body: {} });
                             NIQ.views.history.enter();
                         }) }))));

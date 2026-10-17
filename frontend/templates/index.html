@@ -5,12 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NIQ</title>
     <link rel="stylesheet" href="/static/css/fonts.css">
-    <link rel="stylesheet" href="/static/css/niq.css?v=5.0">
+    <link rel="icon" href="/static/images/niq.png" type="image/png">
+    <link rel="stylesheet" href="/static/css/niq.css?v=6.1">
     <script src="/static/vendor/chart.umd.min.js"></script>
 </head>
 <body>
+    <div class="ambient" aria-hidden="true"><i></i><i></i><i></i></div>
     <header class="top">
-        <button class="brand" id="brand" title="Yeni konuşma">NIQ</button>
+        <button class="brand" id="brand" title="Yeni konuşma" aria-label="NIQ, yeni konuşma"><img src="/static/images/niq.png" width="32" height="32" alt=""></button>
         <button class="pill" id="conn-pill" title="Bağlantıyı aç"><span class="dot" id="conn-dot"></span><span id="conn-label">Bağlı değil</span></button>
         <nav class="links" id="links">
             <button data-view="history">Geçmiş</button>
@@ -25,16 +27,47 @@
         <section class="view active" id="view-chat">
             <div id="connect" hidden>
                 <h1>Bağlan</h1>
-                <p class="lead">Bir veritabanı seç ya da bağlantı metnini yapıştır. Alanlar kendiliğinden dolar.</p>
+                <nav class="connection-steps" aria-label="Bağlantı adımları">
+                    <button type="button" data-connect-step="source" aria-current="step">Kaynak seç</button>
+                    <button type="button" data-connect-step="access">Erişim</button>
+                    <button type="button" data-connect-step="check">Kontrol ve bağlan</button>
+                </nav>
+                <p class="lead" id="db-step-hint">Bu bilgisayardaki bir veritabanını seç.</p>
+                <div id="db-source-panel">
+                <div class="row">
+                    <button class="btn primary" id="db-catalog-btn">Veritabanlarını bul</button>
+                    <button class="btn" id="db-source-file-btn" hidden>SQLite dosyası seç</button>
+                    <button class="link-btn" id="db-demo-btn">Örnek veritabanıyla dene</button>
+                </div>
+                <div id="db-catalog-panel" hidden>
+                    <p id="db-catalog-count" role="status"></p>
+                    <div class="row" id="db-scope-modes">
+                        <button class="btn" data-scope-mode="recommended" aria-pressed="true">Önerilenler</button>
+                        <button class="btn" data-scope-mode="custom" aria-pressed="false">Kendim seçeceğim</button>
+                        <button class="btn" data-scope-mode="all" aria-pressed="false">Tümü</button>
+                    </div>
+                    <div class="field"><input id="db-catalog-search" type="search" aria-label="Veritabanı ara" placeholder="Veritabanı ara"></div>
+                    <div id="db-catalog-list"></div>
+                    <div class="row"><button class="btn primary" id="db-scope-connect-btn">Seçilenlere bağlan</button><span class="note" id="db-scope-count"></span></div>
+                    <p class="note">Sohbet ilgili veritabanlarını ve tabloları kendisi seçer. Sorgular salt-okunur çalışır.</p>
+                    <details id="db-unavailable" hidden><summary>Erişilemeyen kaynaklar</summary><ul id="db-unavailable-list"></ul></details>
+                </div>
+                <p class="note" id="db-discovery-status" role="status"></p>
                 <div class="chips" id="saved-connections" hidden></div>
+                <details id="db-manual-source"><summary>Diğer bağlantılar</summary>
+                <button class="link-btn" id="db-discover-btn">Yerel sunucuları ara</button>
                 <div class="chips" id="discovered" hidden></div>
                 <div class="chips" id="db-types"></div>
-                <p class="note" id="db-type-hint"></p>
-
                 <div class="field">
                     <label for="db_paste">Bağlantı metni (opsiyonel)</label>
                     <input type="text" id="db_paste" autocomplete="off" placeholder="postgresql://kullanici@sunucu/veritabani, ODBC dizesi veya dosya yolu">
                 </div>
+                <div class="row"><button class="btn primary" id="db-next-btn">Devam</button></div>
+                </details>
+                </div>
+                <div id="db-access-panel" hidden>
+                <p id="db-access-summary"></p>
+                <p class="note" id="db-type-hint"></p>
                 <div class="field" id="auth-field" hidden>
                     <label for="db_auth">Kimlik doğrulama</label>
                     <select id="db_auth">
@@ -42,6 +75,7 @@
                         <option value="windows">Windows girişi (parola gerekmez)</option>
                     </select>
                 </div>
+                <details id="db-address-details"><summary>Sunucu bilgileri</summary>
                 <div class="grid2">
                     <div class="field" data-field="host">
                         <label for="db_server">Sunucu</label>
@@ -52,9 +86,13 @@
                         <label for="db_port">Port</label>
                         <input type="number" id="db_port" min="1" max="65535" autocomplete="off">
                     </div>
+                </div>
+                </details>
+                <div class="grid2">
                     <div class="field" data-field="database">
                         <label for="db_database" id="db_database_label">Veritabanı</label>
                         <input type="text" id="db_database" autocomplete="off">
+                        <button type="button" class="link-btn" id="db-file-btn" hidden>Dosya seç</button>
                         <button type="button" class="link-btn" id="db-list-btn">Veritabanlarını getir</button>
                         <select id="db-list-select" hidden></select>
                     </div>
@@ -95,12 +133,21 @@
                         <div class="field"><label for="db_ssh_password">SSH parolası</label><input type="password" id="db_ssh_password" autocomplete="off"></div>
                     </div>
                 </details>
-
                 <div class="row">
+                    <button class="btn" id="db-back-btn">Kaynaklara dön</button>
+                    <button class="btn primary" id="db-access-next-btn">Test et ve devam et</button>
+                </div>
+                </div>
+
+                <div id="db-check-panel" hidden>
+                <p id="db-summary"></p>
+                <div class="row">
+                    <button class="link-btn" id="db-edit-btn">Bilgileri düzenle</button>
                     <button class="btn" id="db-test-btn">Test et</button>
                     <button class="btn primary" id="db-connect-btn">Bağlan</button>
                     <button class="btn" id="db-save-btn">Profili kaydet</button>
                     <button class="btn" id="db-close-btn" hidden>Bağlantıyı kapat</button>
+                </div>
                 </div>
                 <ul class="diag" id="db-diagnostics"></ul>
                 <div class="status" id="db-status"></div>
@@ -209,15 +256,16 @@
         <div class="dock-inner">
             <div class="cmd-list" id="cmd-list" hidden></div>
             <div class="bar">
-                <textarea id="q" rows="1" placeholder="Bir şey sor" autocomplete="off"></textarea>
+                <textarea id="q" rows="1" placeholder="Bir şey sor…" aria-label="Sorun" autocomplete="off"></textarea>
+                <div class="composer-tools">
                 <button class="icon-btn" id="mic" title="Konuşarak sor" aria-label="Konuşarak sor">
                     <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
                 </button>
                 <button class="icon-btn go" id="send" title="Gönder" aria-label="Gönder">
                     <svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
                 </button>
+                </div>
             </div>
-            <p class="hint" id="hint">Enter gönderir. / ile komutlar, Ctrl+K ile komut çubuğu.</p>
         </div>
     </footer>
 

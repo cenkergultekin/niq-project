@@ -11,6 +11,9 @@
     let busy = false;
     let listening = false;
     let transcribing = false;
+    let startingVoice = false;
+    let connectionGeneration = 0;
+    let voicePrefix = '';
     const recent = [];
     let recentIndex = -1;
     let selected = 0;
@@ -82,6 +85,9 @@
     function setBusy(value) {
         busy = value;
         sendBtn.disabled = value;
+        sendBtn.classList.toggle('loading', value);
+        sendBtn.setAttribute('aria-busy', String(value));
+        sendBtn.setAttribute('aria-label', value ? 'Yanıt hazırlanıyor' : 'Gönder');
     }
 
     function refreshEmpty() {
@@ -90,7 +96,8 @@
         const profile = NIQ.state.profile;
         $('greet').textContent = 'Ne öğrenmek istersin?';
         $('greet-sub').textContent = profile
-            ? `${profile.name || profile.database} hazır. Türkçe sor, cevabı tablo olarak al.`
+            ? profile.scope_count > 1 ? `${profile.scope_count} veritabanı hazır. Soruyla ilgili kaynakları kendim seçerim.`
+                : `${profile.name || profile.database} hazır. Türkçe sor, cevabı tablo olarak al.`
             : 'Önce bir veritabanına bağlan.';
     }
 
@@ -104,6 +111,7 @@
     }
 
     async function newConversation() {
+        cancelRecording();
         const old = NIQ.state.conversationId;
         NIQ.state.conversationId = NIQ.newId();
         NIQ.clear(stream);
@@ -114,6 +122,7 @@
     }
 
     function onConnectionChange() {
+        cancelRecording();
         const connected = NIQ.state.connected;
         input.placeholder = connected ? 'Bir şey sor' : 'Önce bağlan';
         NIQ.clear(stream);
@@ -199,6 +208,7 @@
     function resultBlock(data, question) {
         const block = el('div');
         const rows = data.results || [];
+        if (data.source) block.appendChild(el('p', { class: 'note', text: data.source }));
         if (data.explanation && data.mode !== 'analysis') block.appendChild(el('p', { class: 'explain', text: data.explanation }));
         if (data.attempts > 1) block.appendChild(el('p', { class: 'note', text: `Sorguyu ${data.attempts} denemede düzelttim.` }));
 
@@ -365,7 +375,7 @@
         const body = addMessage(query.question);
         const node = query.is_successful
             ? resultBlock({ success: true, sql: query.sql_query, results: query.query_results || [], explanation: query.result_message || '',
-                query_id: query.id, attempts: 1 }, query.question)
+                query_id: query.id, attempts: 1, source: query.source }, query.question)
             : errorBlock(new Error(query.error_message || 'Sorgu hata verdi'), query.question);
         NIQ.clear(body).appendChild(node);
         scrollDown();
@@ -437,45 +447,78 @@
     }
 
     // ---- sesli sorgu ----
-    function voiceAutoSend() {
-        try { return localStorage.getItem('niq.voiceAuto') !== 'false'; } catch (e) { return true; }
-    }
-
     async function finishRecording() {
+        if (transcribing) return;
         listening = false;
         micBtn.classList.remove('rec');
+        micBtn.setAttribute('aria-pressed', 'false');
         transcribing = true;
+        micBtn.disabled = true;
         input.placeholder = 'Metne çeviriyorum...';
+        const connection = connectionGeneration;
         try {
             const text = await NIQ.voice.stop();
+            if (connection !== connectionGeneration) return;
             if (!text) { NIQ.toast('Ses anlaşılamadı, tekrar dene'); return; }
-            input.value = text;
+            input.value = voicePrefix + text;
             resize();
-            if (voiceAutoSend()) submit();
         } catch (error) {
-            NIQ.toast(error.message, 'error');
+            if (connection === connectionGeneration) NIQ.toast(error.message, 'error');
         } finally {
             transcribing = false;
+            micBtn.disabled = false;
+            input.classList.remove('voice-draft');
+            input.readOnly = false;
+            input.focus();
             input.placeholder = NIQ.state.connected ? 'Bir şey sor' : 'Önce bağlan';
         }
     }
 
+    function cancelRecording() {
+        connectionGeneration++;
+        NIQ.voice.cancel();
+        listening = false;
+        micBtn.classList.remove('rec');
+        micBtn.setAttribute('aria-pressed', 'false');
+        input.classList.remove('voice-draft');
+        input.readOnly = false;
+        input.placeholder = NIQ.state.connected ? 'Bir şey sor' : 'Önce bağlan';
+    }
+
     async function toggleMic() {
-        if (transcribing) return;
+        if (transcribing || startingVoice) return;
         if (listening) { await finishRecording(); return; }
         if (!NIQ.state.connected) { NIQ.toast('Önce bir veritabanına bağlan', 'error'); return; }
         try {
-            await NIQ.voice.start(() => finishRecording());
+            startingVoice = true;
+            micBtn.disabled = true;
+            voicePrefix = input.value.trimEnd();
+            if (voicePrefix) voicePrefix += ' ';
+            input.classList.add('voice-draft');
+            input.readOnly = true;
+            const connection = connectionGeneration;
+            await NIQ.voice.start(() => finishRecording(), (text) => {
+                if (connection !== connectionGeneration) return;
+                input.value = voicePrefix + text;
+                resize();
+            });
             listening = true;
             micBtn.classList.add('rec');
+            micBtn.setAttribute('aria-pressed', 'true');
             input.placeholder = 'Dinliyorum. Bitirince mikrofona tekrar bas';
         } catch (error) {
+            input.classList.remove('voice-draft');
+            input.readOnly = false;
             NIQ.toast(error.message, 'error');
+        } finally {
+            startingVoice = false;
+            micBtn.disabled = false;
         }
     }
 
     // ---- gönderme ----
     function submit() {
+        if (listening || startingVoice || transcribing) return;
         const text = input.value.trim();
         if (!text) return;
         hideCommands();
@@ -533,5 +576,11 @@
         if (!NIQ.voice.supported()) micBtn.hidden = true;
     }
 
-    NIQ.chat = { ask, plan, bind, refreshEmpty, onConnectionChange, newConversation, renderTable, showStored };
+    function editQuestion(text) {
+        NIQ.go('chat');
+        cancelRecording();
+        input.value = text;
+        resize(); input.focus();
+    }
+    NIQ.chat = { ask, plan, bind, refreshEmpty, onConnectionChange, newConversation, renderTable, showStored, cancelRecording, editQuestion };
 })();

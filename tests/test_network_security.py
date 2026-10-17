@@ -29,7 +29,7 @@ def test_windows_auth_url_has_no_credentials():
 
 def test_sql_auth_url_has_credentials():
     odbc = odbc_part(build_url("mssql", "srv", 1433, "db", "sa", "p}w", {}))
-    assert "UID=sa" in odbc and "PWD={p}}w}" in odbc and "Trusted_Connection" not in odbc
+    assert "UID={sa}" in odbc and "PWD={p}}w}" in odbc and "Trusted_Connection" not in odbc
 
 
 @pytest.mark.parametrize("ssl, expected", [

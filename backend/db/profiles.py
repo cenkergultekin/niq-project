@@ -8,6 +8,7 @@ dizesi ya da dosya yolu yapıştırırsa tür ve alanlar tahmin edilir.
 import json
 import logging
 import re
+import shlex
 import threading
 import uuid
 from dataclasses import asdict, dataclass, field
@@ -56,6 +57,8 @@ class Profile:
             self.port = dialect.default_port
         if not self.host and not dialect.file_based:
             self.host = "localhost"
+        if self.port is not None and (isinstance(self.port, bool) or not 1 <= int(self.port) <= 65535):
+            raise ValueError("Port 1–65535 arasında olmalı")
 
     def _clean_options(self, options: Dict[str, Any]) -> Dict[str, str]:
         clean = {k: str(v).strip() for k, v in (options or {}).items() if k in OPTION_KEYS and str(v).strip()}
@@ -67,6 +70,8 @@ class Profile:
             raise ValueError("ssl 'disable', 'require' veya 'verify' olmalı")
         if clean.get("ssh_port") and not clean["ssh_port"].isdigit():
             raise ValueError("SSH portu sayı olmalı")
+        if clean.get("ssh_port") and not 1 <= int(clean["ssh_port"]) <= 65535:
+            raise ValueError("SSH portu 1–65535 arasında olmalı")
         if clean.get("ssh_host") and DIALECTS[self.type].file_based:
             raise ValueError("SQLite dosyası için SSH tüneli kullanılamaz")
         return clean
@@ -213,11 +218,29 @@ def _split_host_port(server: str) -> tuple:
 
 def _parse_kv(text: str) -> Dict[str, str]:
     pairs = {}
-    for part in re.split(r";(?![^{]*})", text):
-        if "=" in part:
-            key, value = part.split("=", 1)
-            pairs[re.sub(r"\s+", " ", key.strip().lower())] = value.strip().strip("{}")
+    for match in re.finditer(r"(?:^|;)\s*([^=;]+)=\s*(\{(?:[^}]|}})*\}|[^;]*)", text):
+        key, value = match.groups()
+        value = value.strip()
+        if value.startswith("{") and value.endswith("}"):
+            value = value[1:-1].replace("}}", "}")
+        pairs[re.sub(r"\s+", " ", key.strip().lower())] = value
     return pairs
+
+
+def _connection_options(values: Dict[str, str], db_type: str) -> Dict[str, str]:
+    """Yaygın bağlantı dizelerinin TLS ayarlarını NIQ alanlarına taşır."""
+    options = {k: v for k, v in values.items() if k in OPTION_KEYS}
+    mode = (values.get("sslmode") or values.get("ssl-mode") or "").lower()
+    modes = {"disable": "disable", "disabled": "disable", "require": "require", "required": "require",
+             "verify-ca": "verify", "verify-full": "verify", "verify_ca": "verify", "verify_identity": "verify"}
+    if mode in modes:
+        options["ssl"] = modes[mode]
+    if values.get("sslrootcert"):
+        options["ssl_ca"] = values["sslrootcert"]
+    if db_type == "mssql" and values.get("encrypt", "").lower() in ("true", "yes", "mandatory", "strict"):
+        trust = values.get("trustservercertificate", "").lower() in ("true", "yes")
+        options["ssl"] = "require" if trust else "verify"
+    return options
 
 
 def parse_connection_input(text: str) -> Dict[str, Any]:
@@ -225,6 +248,8 @@ def parse_connection_input(text: str) -> Dict[str, Any]:
     URL, JDBC, ODBC/ADO dizesi veya dosya yolundan alanları çıkarır.
     Sonuç: {type, host, port, database, user, password, options} (bulunanlar) + 'recognized' (bool).
     """
+    if not isinstance(text, str):
+        raise ValueError("Bağlantı metin olmalı")
     text = (text or "").strip().strip('"')
     if not text:
         return {"recognized": False}
@@ -243,8 +268,9 @@ def parse_connection_input(text: str) -> Dict[str, Any]:
         result = {"recognized": True, "type": "mssql", "host": host, "port": port,
                   "database": kv.get("databasename") or kv.get("database", ""),
                   "user": kv.get("user", ""), "password": kv.get("password", "")}
+        result["options"] = _connection_options(kv, "mssql")
         if kv.get("integratedsecurity", "").lower() in ("true", "yes", "sspi"):
-            result["options"] = {"auth": "windows"}
+            result["options"]["auth"] = "windows"
         return result
     if lowered.startswith("jdbc:"):
         text = text[len("jdbc:"):]
@@ -261,9 +287,19 @@ def parse_connection_input(text: str) -> Dict[str, Any]:
             return {"recognized": True, "type": "sqlite", "database": path}
         parsed = urlparse(normalized)
         query = {k: v[0] for k, v in parse_qs(parsed.query).items()}
+        if db_type == "mssql" and query.get("odbc_connect"):
+            return parse_connection_input(query["odbc_connect"])
         return {"recognized": True, "type": db_type, "host": parsed.hostname or "", "port": parsed.port,
                 "database": unquote(parsed.path.lstrip("/")), "user": unquote(parsed.username or ""),
-                "password": unquote(parsed.password or ""), "options": {k: v for k, v in query.items() if k == "driver"}}
+                "password": unquote(parsed.password or ""), "options": _connection_options(query, db_type)}
+
+    # libpq: host=... dbname=... user=... password='... ...' sslmode=require
+    if re.search(r"\b(host|dbname)\s*=", text, re.IGNORECASE) and ";" not in text:
+        kv = dict(part.split("=", 1) for part in shlex.split(text) if "=" in part)
+        return {"recognized": True, "type": "postgresql", "host": kv.get("host", ""),
+                "port": int(kv["port"]) if kv.get("port") else None, "database": kv.get("dbname", ""),
+                "user": kv.get("user", ""), "password": kv.get("password", ""),
+                "options": _connection_options(kv, "postgresql")}
 
     # ODBC / ADO.NET (SQL Server)
     if "=" in text and ";" in text:
@@ -277,7 +313,7 @@ def parse_connection_input(text: str) -> Dict[str, Any]:
                 "user": kv.get("uid") or kv.get("user id") or kv.get("user", ""),
                 "password": kv.get("pwd") or kv.get("password", ""),
             }
-            options = {}
+            options = _connection_options(kv, "mssql")
             if kv.get("driver"):
                 options["driver"] = kv["driver"]
             integrated = (kv.get("integrated security") or kv.get("trusted_connection") or "").lower()

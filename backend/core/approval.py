@@ -10,6 +10,8 @@ agent (CLI) `--yes` ile açıkça onaylar.
 from typing import Any, Dict
 
 CRITICAL_ACTIONS = {
+    "read_connection_credentials": "Seçtiğin yerel sunucunun veritabanı bağlantı bilgilerini NIQ'de kullan. Parola ekranda gösterilmez ve kaydedilmez",
+    "discover_database_catalog": "Yerel sunucuların ve kayıtlı bağlantıların erişim bilgilerini NIQ'de kullanarak erişilebilir veritabanlarını bul. Sırlar gösterilmez/kaydedilmez; yalnızca veritabanı ve tablo adları okunur",
     "save_connection": "Bağlantı profilini ve parolasını bu bilgisayara kaydet",
     "delete_connection": "Bağlantı profilini ve kayıtlı parolasını sil",
     "clear_api_key": "Kayıtlı AI API anahtarını sil",

@@ -35,6 +35,13 @@ def test_javascript_is_syntactically_valid(name):
     assert result.returncode == 0, result.stderr
 
 
+@pytest.mark.skipif(shutil.which("node") is None, reason="node yok")
+def test_voice_cleanup_after_errors_and_cancel():
+    result = subprocess.run(["node", str(Path(__file__).parent / "voice_lifecycle.cjs")],
+                            capture_output=True, text=True, timeout=10)
+    assert result.returncode == 0, result.stderr
+
+
 def test_all_dom_ids_used_by_scripts_exist_in_html(client):
     html = client.get("/").get_data(as_text=True)
     html_ids = set(re.findall(r'id="([^"]+)"', html))
@@ -73,3 +80,15 @@ def test_save_current_connection_needs_approval_and_is_idempotent(connected):
     assert connected.post("/api/connections/current", json={"approved": True}).status_code == 200
     assert connected.post("/api/connections/current", json={"approved": True}).status_code == 200
     assert len(connected.get("/api/connections").get_json()["data"]) == 1
+
+
+def test_last_connection_survives_port_changes_but_explicit_disconnect_clears_it(connected):
+    assert connected.get("/api/connections").get_json()["last_connection_id"] == ""
+    saved = connected.post("/api/connections/current", json={"approved": True}).get_json()["data"]
+    assert connected.get("/api/connections").get_json()["last_connection_id"] == saved["id"]
+    assert connected.post("/api/clear_db", json={}).status_code == 200
+    assert connected.get("/api/connections").get_json()["last_connection_id"] == ""
+    assert connected.post(f"/api/connections/{saved['id']}/connect", json={}).status_code == 200
+    # Başka Host portundan gelen arayüz de aynı yerel tercihi alır; localStorage'a bağlı değildir.
+    response = connected.get("/api/connections", headers={"Host": "127.0.0.1:54321"}).get_json()
+    assert response["last_connection_id"] == saved["id"]

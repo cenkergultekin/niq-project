@@ -114,6 +114,7 @@
     // ---- yönlendirme ----
     NIQ.go = function (name) {
         const view = name || 'chat';
+        if (view !== 'chat' && NIQ.chat) NIQ.chat.cancelRecording();
         document.querySelectorAll('.view').forEach((el) => el.classList.toggle('active', el.id === 'view-' + view));
         document.querySelectorAll('#links button').forEach((b) => b.classList.toggle('active', b.dataset.view === view));
         $('dock').hidden = view !== 'chat';
@@ -129,7 +130,7 @@
         NIQ.state.profile = profile || null;
         const label = $('conn-label');
         $('conn-dot').classList.toggle('on', !!profile);
-        label.textContent = profile ? (profile.name || profile.database || 'Bağlı') : 'Bağlı değil';
+        label.textContent = profile ? (profile.scope_count > 1 ? `${profile.scope_count} veritabanı bağlı` : profile.name || profile.database || 'Bağlı') : 'Bağlı değil';
         $('db-close-btn').hidden = !profile;
         if (NIQ.chat) NIQ.chat.onConnectionChange();
     };

@@ -30,9 +30,10 @@ Desteklenenler: **SQL Server, PostgreSQL, MySQL / MariaDB, SQLite**. Yeni tür, 
 
 Arayüzde bağlantı dört adımdır: **Tür** (yerelde bulunan sunucular ayrıca önerilir), **Bilgiler**, **Test**, **Bağlan**.
 - Bir bağlantı URL'si, ODBC/ADO/JDBC dizesi ya da dosya yolu yapıştırırsanız tür, sunucu, port, veritabanı ve kullanıcı otomatik dolar. Port, sunucu ve sürücü varsayılanları türe göre tahmin edilir.
-- "Veritabanlarını getir" sunucudaki adları listeler.
+- "Veritabanlarını getir" adı henüz bilinmeyen veya yanlış yazılmış veritabanından bağımsız olarak sunucudaki adları listeler.
 - **Test** adım adım ilerler (sürücü, ağ, giriş, tablo erişimi, yetki); başarısız adım ne yapılacağını söyler.
 - Profiller parolayla birlikte yalnızca siz onaylarsanız kaydedilir; parola Windows Credential Manager'da durur.
+- Kayıtsız bağlantının sırları yalnızca bellekte kalır. Bağlandıktan sonra profili parolayı yeniden girmeden kaydedebilirsiniz. Son kullanılan kayıtlı bağlantı, masaüstü portu değişse de hatırlanır; açıkça bağlantıyı kapatırsanız otomatik açılmaz.
 - Soru yazarken ilgili tablolar tahmin edilip seçilir.
 - **SQL Server Windows girişi** (Trusted Connection): kimlik doğrulamada "Windows girişi"ni seçin, kullanıcı/parola gerekmez.
 - **Şifreli bağlantı**: Gelişmiş > SSL/TLS (otomatik, şifreli, sertifikayı doğrula, kapalı).
@@ -71,7 +72,7 @@ Claude Code için: `claude mcp add niq -- C:\yol\NIQ\venv\Scripts\python.exe C:\
 ## Güvenlik
 
 - Veritabanına yazma yoktur: INSERT/UPDATE/DELETE/DDL/EXEC/`SELECT INTO`/`OPENROWSET` reddedilir. Yine de uygulamayı **salt-okunur bir SQL kullanıcısıyla** kullanmanız önerilir.
-- API anahtarları ve veritabanı parolası Windows Credential Manager'da saklanır; dağıtılan exe'ye veya dosyaya yazılmaz.
+- Kaydedilen API anahtarları ve onaylanan bağlantı parolaları Windows Credential Manager'da saklanır; kayıtsız bağlantının sırları bellekte kalır. Dağıtılan exe'ye yazılmaz.
 - Yerel sunucu rastgele boş bir porta bağlanır, yalnızca `127.0.0.1` Host/Origin kabul eder.
 - Sonuç satırları varsayılan olarak AI sağlayıcısına gönderilmez. Yalnızca Ayarlar'dan "AI yorumu"nu açarsanız ilk 20 satır gider.
 
@@ -91,6 +92,12 @@ pytest                          # testler
 ruff check .                    # lint
 ```
 Geliştirme sırasında anahtarı `.env` dosyasına da yazabilirsiniz (`OPENROUTER_API_KEY=...` veya `OPENAI_API_KEY=...`); `.env` paketlenmez.
+
+### Yerel doğrulama
+
+Docker açıkken `python tests/local_databases.py --desktop`, PostgreSQL 17, gerçek MySQL 8.4, MariaDB 11.8 ve SQL Server 2022'yi yalnızca localhost'ta geçici test sunucuları olarak açar. SQLite testleriyle birlikte tüm paketi, Qt bağlantı panelini ve sentetik mikrofon akışını çalıştırıp sunucuları kapatır. PostgreSQL için geçici TLS sertifikası da üretir. Kullanıcının veritabanına, profillerine ve anahtarlarına dokunmaz.
+
+Fiziksel mikrofon için `--real-mic` ekleyin; açılan test penceresinde mikrofona basıp durdurun. Bu masaüstü kontrollerinde ses yerel test dublöründe işlenir, dışarı gönderilmez. Tekrar inceleme için `--keep`, sonrasında kapatmak için `python tests/local_databases.py --stop` kullanılabilir. Yerel portlar: 55432, 53307, 53306 ve 51433. SQL Server TLS için ODBC Driver 18 gerekir; Windows girişi, yetkili bir Windows/SQL Server ortamı gerektirir.
 
 ## Modeller
 
