@@ -10,6 +10,31 @@
     const $ = (id) => document.getElementById(id);
     NIQ.$ = $;
 
+    // Atmosfer içeriği engellemeden işaretçinin yönünde yavaşça kayar.
+    const atmosphere = document.querySelector('.ambient');
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    let atmosphereFrame = 0;
+    let pointerX = 0.5;
+    let pointerY = 0.5;
+    function paintAtmosphere() {
+        atmosphereFrame = 0;
+        if (!atmosphere || reducedMotion.matches) return;
+        atmosphere.style.setProperty('--ambient-x', (pointerX - 0.5) * 55 + 'px');
+        atmosphere.style.setProperty('--ambient-y', (pointerY - 0.5) * 40 + 'px');
+        atmosphere.style.setProperty('--pointer-x', pointerX * 100 + '%');
+        atmosphere.style.setProperty('--pointer-y', pointerY * 100 + '%');
+    }
+    window.addEventListener('pointermove', (event) => {
+        if (reducedMotion.matches || event.pointerType === 'touch') return;
+        pointerX = event.clientX / innerWidth;
+        pointerY = event.clientY / innerHeight;
+        if (!atmosphereFrame) atmosphereFrame = requestAnimationFrame(paintAtmosphere);
+    }, { passive: true });
+    window.addEventListener('blur', () => { pointerX = pointerY = 0.5; paintAtmosphere(); });
+    reducedMotion.addEventListener('change', () => {
+        if (reducedMotion.matches && atmosphere) atmosphere.removeAttribute('style');
+    });
+
     NIQ.newId = () => 'c' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
     NIQ.state.conversationId = NIQ.newId();
 
@@ -129,8 +154,9 @@
         NIQ.state.connected = !!profile;
         NIQ.state.profile = profile || null;
         const label = $('conn-label');
-        $('conn-dot').classList.toggle('on', !!profile);
-        label.textContent = profile ? (profile.scope_count > 1 ? `${profile.scope_count} veritabanı bağlı` : profile.name || profile.database || 'Bağlı') : 'Bağlı değil';
+        label.textContent = profile ? (profile.scope_count > 1 ? `${profile.scope_count} veri kaynağı`
+            : profile.name === 'Örnek satışlar' ? 'Satış verileri' : profile.name || profile.database || 'Veri kaynağı')
+            : 'Veri kaynağı seç';
         $('db-close-btn').hidden = !profile;
         if (NIQ.chat) NIQ.chat.onConnectionChange();
     };

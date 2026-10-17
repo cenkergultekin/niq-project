@@ -6,6 +6,7 @@
     const { $, el, api } = NIQ;
     const stream = $('stream');
     const input = $('q');
+    const emptyPrompt = 'Verilerine sor…';
     const sendBtn = $('send');
     const micBtn = $('mic');
     let busy = false;
@@ -93,12 +94,7 @@
     function refreshEmpty() {
         const hasMessages = stream.children.length > 0;
         $('empty').hidden = hasMessages || !NIQ.state.connected || !$('connect').hidden;
-        const profile = NIQ.state.profile;
         $('greet').textContent = 'Ne öğrenmek istersin?';
-        $('greet-sub').textContent = profile
-            ? profile.scope_count > 1 ? `${profile.scope_count} veritabanı hazır. Soruyla ilgili kaynakları kendim seçerim.`
-                : `${profile.name || profile.database} hazır. Türkçe sor, cevabı tablo olarak al.`
-            : 'Önce bir veritabanına bağlan.';
     }
 
     async function loadSuggestions() {
@@ -124,7 +120,7 @@
     function onConnectionChange() {
         cancelRecording();
         const connected = NIQ.state.connected;
-        input.placeholder = connected ? 'Bir şey sor' : 'Önce bağlan';
+        input.placeholder = connected ? emptyPrompt : 'Önce bağlan';
         NIQ.clear(stream);
         NIQ.state.conversationId = NIQ.newId();
         if (connected) { $('connect').hidden = true; stream.hidden = false; loadSuggestions(); }
@@ -470,7 +466,7 @@
             input.classList.remove('voice-draft');
             input.readOnly = false;
             input.focus();
-            input.placeholder = NIQ.state.connected ? 'Bir şey sor' : 'Önce bağlan';
+            input.placeholder = NIQ.state.connected ? emptyPrompt : 'Önce bağlan';
         }
     }
 
@@ -482,7 +478,7 @@
         micBtn.setAttribute('aria-pressed', 'false');
         input.classList.remove('voice-draft');
         input.readOnly = false;
-        input.placeholder = NIQ.state.connected ? 'Bir şey sor' : 'Önce bağlan';
+        input.placeholder = NIQ.state.connected ? emptyPrompt : 'Önce bağlan';
     }
 
     async function toggleMic() {
