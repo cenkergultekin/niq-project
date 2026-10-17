@@ -14,7 +14,7 @@ from backend.config.config import Settings
 from backend.core.sql_guard import validate_sql
 from backend.db.connector import Connector
 from backend.models.models import SavedQuery
-from backend.services.ai_service import AIService, AIServiceError, format_schema
+from backend.services.ai_service import AIService, AIServiceError, format_schema, query_budget
 from backend.services.history import HistoryStore
 from backend.services.knowledge import KnowledgeStore
 from backend.services.query_service import Conversation, resolve_tables
@@ -101,6 +101,7 @@ def _run_step(connector: Connector, sql: str, known: List[str], row_limit: int) 
             "row_count": len(rows), "truncated": response.truncated}
 
 
+@query_budget
 def run_analysis(connector: Connector, ai: AIService, history: HistoryStore, knowledge: KnowledgeStore,
                  question: str, conversation: Optional[Conversation] = None, max_steps: int = MAX_STEPS) -> Dict[str, Any]:
     """Soruyu birkaç sorguyla analiz eder. Dönüş: UI ve API için yanıt gövdesi."""

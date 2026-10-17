@@ -9,9 +9,11 @@ import json
 import logging
 import re
 import time
+from contextvars import ContextVar
+from functools import wraps
 from typing import Any, Dict, List, Optional
 
-from openai import APIStatusError, BadRequestError, OpenAI
+from openai import APIStatusError, APITimeoutError, BadRequestError, OpenAI
 
 from backend.config.config import Settings
 from backend.core.utils import ValidationError
@@ -20,6 +22,29 @@ from backend.models.models import DatabaseSchema, SavedQuery
 from backend.services.ai_accounts import AccountStore, selected_config
 
 logger = logging.getLogger(__name__)
+QUERY_DEADLINE = ContextVar("niq_query_deadline", default=None)
+
+
+def query_budget(function):
+    """Nested AI/SQL stages share one budget, also across workspace workers."""
+    @wraps(function)
+    def wrapped(*args, **kwargs):
+        token = QUERY_DEADLINE.set(QUERY_DEADLINE.get() or time.monotonic() + 90)
+        try:
+            return function(*args, **kwargs)
+        finally:
+            QUERY_DEADLINE.reset(token)
+    return wrapped
+
+
+def remaining_query_time():
+    deadline = QUERY_DEADLINE.get()
+    if deadline is None:
+        return None
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise AIServiceError("Yanıt süre sınırına ulaştı. Daha dar bir soru veya daha az veri kaynağıyla dene.")
+    return remaining
 
 SQL_SCHEMA = {
     "name": "sql_answer",
@@ -194,15 +219,19 @@ class AIService:
 
     def _send(self, params: Dict[str, Any]):
         """İstek gönderir. Şema/temperature desteklenmezse parametreyi çıkarıp yeniden dener."""
+        remaining = remaining_query_time()
+        client = self.client.with_options(timeout=min(30.0, remaining), max_retries=0) if remaining is not None else self.client
         if self.config["provider"] in ("chatgpt", "anthropic"):
             from backend.services.ai_adapters import anthropic_send, chatgpt_send
             try:
                 if self.config["provider"] == "chatgpt":
-                    self.client.api_key = AccountStore().chatgpt_credentials(self.config["account_id"])["access_token"]
-                    return chatgpt_send(self.client, params)
-                return anthropic_send(self.client, params)
+                    client.api_key = AccountStore().chatgpt_credentials(self.config["account_id"])["access_token"]
+                    return chatgpt_send(client, params, deadline=QUERY_DEADLINE.get())
+                return anthropic_send(client, params)
             except ValidationError as exc:
                 raise AIServiceError(str(exc)) from None
+            except APITimeoutError:
+                raise AIServiceError("Model zamanında yanıt vermedi. Yeniden deneyebilir veya modelini değiştirebilirsin.") from None
             except APIStatusError as exc:
                 if self.config["provider"] == "chatgpt":
                     code = getattr(exc, "code", "")
@@ -215,8 +244,11 @@ class AIService:
             except Exception:
                 raise AIServiceError("AI sağlayıcısı isteği tamamlamadı. Hesabını ve modelini kontrol et.") from None
         for _ in range(3):
+            remaining_query_time()
             try:
-                return self.client.chat.completions.create(**params)
+                return client.chat.completions.create(**params)
+            except APITimeoutError:
+                raise AIServiceError("Model zamanında yanıt vermedi. Yeniden deneyebilir veya modelini değiştirebilirsin.") from None
             except BadRequestError as exc:
                 detail = str(exc).lower()
                 if "response_format" in params and ("response_format" in detail or "json_schema" in detail or "structured" in detail):

@@ -358,12 +358,20 @@
         NIQ.go('chat');
         setBusy(true);
         const body = addMessage(text);
+        const started = Date.now();
+        const pendingText = body.querySelector('p');
+        pendingText.setAttribute('role', 'status');
+        const waitTimer = setInterval(() => {
+            const seconds = Math.floor((Date.now() - started) / 1000);
+            pendingText.textContent = `Yanıt hazırlanıyor · ${seconds} sn`;
+        }, 1000);
         try {
             const data = (await api('/query', { body: { question: text, conversation_id: NIQ.state.conversationId, mode: (options && options.mode) || 'auto' } }));
             NIQ.clear(body).appendChild(data.mode === 'analysis' ? analysisBlock(data, text) : resultBlock(data, text));
         } catch (error) {
             NIQ.clear(body).appendChild(error.cancelled ? el('p', { class: 'note', text: 'İptal edildi.' }) : errorBlock(error, text));
         } finally {
+            clearInterval(waitTimer);
             setBusy(false);
             scrollDown();
         }

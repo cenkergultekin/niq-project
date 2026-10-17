@@ -1,5 +1,6 @@
 """Provider-native transports, normalized to NIQ's small chat/tool interface."""
 import json
+import time
 from types import SimpleNamespace as NS
 
 from backend.core.utils import ValidationError
@@ -27,7 +28,7 @@ def response_input(messages):
     return items
 
 
-def chatgpt_send(client, params):
+def chatgpt_send(client, params, deadline=None):
     body = {"model": params["model"], "input": response_input(params["messages"]), "store": False, "stream": True}
     schema = params.get("response_format", {}).get("json_schema")
     if schema:
@@ -39,6 +40,8 @@ def chatgpt_send(client, params):
     streamed_output = {}
     with client.responses.create(**body) as stream:
         for event in stream:
+            if deadline is not None and time.monotonic() >= deadline:
+                raise ValidationError("Yanıt süre sınırına ulaştı. Daha dar bir soru veya daha az veri kaynağıyla dene.")
             if event.type in ("response.failed", "response.incomplete", "error"):
                 error = getattr(getattr(event, "response", None), "error", None)
                 code = getattr(error, "code", None) or getattr(event, "code", "")
